@@ -93,10 +93,12 @@ export function ImportScreen() {
     return run(async () => {
       setBusy(tab === "pdf" ? "Reading PDF…" : "Reading screenshot with the vision model…");
       const data = await toBase64(file);
-      const res = await callApi<{ transactions: Transaction[]; path: string }>("vision", { kind: tab === "pdf" ? "pdf" : "image", data, mediaType: file.type || "image/png", fileName: file.name });
+      const res = await callApi<{ transactions: Transaction[]; unparsed?: UnparsedRow[]; path: string }>("vision", { kind: tab === "pdf" ? "pdf" : "image", data, mediaType: file.type || "image/png", fileName: file.name });
       if (!res.ok || !res.data) throw new Error(res.error ?? "Could not read the file.");
       const t = res.data.transactions;
-      await finish({ transactions: t, unparsed: [], stats: { total_inputs: t.length, parsed: t.length, unparsed: 0, via_llm: t.length } }, file.name, res.data.path);
+      const un = res.data.unparsed ?? [];
+      const viaModel = /own parser/.test(res.data.path) ? 0 : t.length;
+      await finish({ transactions: t, unparsed: un, stats: { total_inputs: t.length + un.length, parsed: t.length, unparsed: un.length, via_llm: viaModel } }, file.name, res.data.path);
     });
   }
 

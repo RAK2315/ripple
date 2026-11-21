@@ -3,6 +3,7 @@ import { z } from "zod";
 import { extractText, getDocumentProxy } from "unpdf";
 import { mask } from "@/lib/ai/mask";
 import { protect } from "@/lib/ai/protect";
+import { parsePdfText } from "@/lib/ingest/pdf-text";
 import { hasVision, structured } from "@/lib/ai/model";
 
 export const maxDuration = 180;
@@ -49,12 +50,25 @@ export const POST = aiRoute(async function POST(req: Request) {
       for (let i = 0; i < starts.length; i += 15) chunks.push(masked.slice(starts[i], starts[i + 15] ?? masked.length));
       const parts = await Promise.all(
         (chunks.length ? chunks : [masked]).map((c) =>
-          structured({ model: "smart", system: SYSTEM, prompt: `Statement header:\n${header}\n\nRows:\n${c}`, schema, timeoutMs: 90000 }),
+          // short timeout: on a quota error the deterministic floor below answers instead of a multi-minute retry wait
+          structured({ model: "smart", system: SYSTEM, prompt: `Statement header:\n${header}\n\nRows:\n${c}`, schema, timeoutMs: 30000 }),
         ),
       );
       const okParts = parts.filter((p) => p !== null);
-      res = okParts.length ? { rows: okParts.flatMap((p) => p.rows) } : null;
-      if (okParts.length < parts.length) path = `text-layer (${parts.length - okParts.length} of ${parts.length} chunks failed)`;
+      if (okParts.length === parts.length) res = { rows: okParts.flatMap((p) => p.rows) };
+      else {
+        // floor: no model, our own parser over the same text, so a PDF never dies with the quota
+        const det = parsePdfText(text, fileName);
+        if (det.transactions.length)
+          return Response.json({
+            ok: true,
+            data: { transactions: det.transactions, unparsed: det.unparsed, path: `text-layer, read by RIPPLE's own parser (model unavailable for ${parts.length - okParts.length} of ${parts.length} chunks)` },
+            masked,
+            degraded: true,
+          });
+        res = okParts.length ? { rows: okParts.flatMap((p) => p.rows) } : null;
+        path = `text-layer (${parts.length - okParts.length} of ${parts.length} chunks failed)`;
+      }
     } else if (!hasVision()) {
       return Response.json({ ok: false, error: "This PDF has no text layer (scanned). Reading scanned pages needs a vision model, which this deployment does not have. Paste the bank SMS or upload the CSV instead." });
     } else {

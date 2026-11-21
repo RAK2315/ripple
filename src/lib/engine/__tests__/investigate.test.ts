@@ -219,6 +219,14 @@ describe("the chain", () => {
     const good = await runInvestigation(ctx, "why?", ok);
     expect(good.proposal?.kind).toBe("scenario");
     expect(good.proposal?.step).toBe(1);
+    // cites the step that looked at Dining, not one whose results merely list it (seen live: get_profile was cited)
+    const two = async ({ steps }: { steps: ToolResult[] }): Promise<PlannerStep> =>
+      steps.length === 0
+        ? { type: "call", tool: "get_profile", args: {} }
+        : steps.length === 1
+          ? { type: "call", tool: "get_category_trend", args: { category: "Dining" } }
+          : { type: "conclude", explanation: null, proposal: { name: "Trim dining", assumptions: [{ kind: "category_pct", category: "Dining", pct: -30 }] } };
+    expect((await runInvestigation(ctx, "why?", two)).proposal?.step).toBe(2);
   });
 
   it("stated prices and durations are read by our code, model names are not prices", () => {

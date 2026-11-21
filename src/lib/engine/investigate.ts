@@ -452,13 +452,19 @@ const improves = (d: ScenarioDraft) =>
 
 /** Which step touched what an assumption changes (its category or recurring payment), so a model proposal can cite it. */
 function stepTouching(steps: ToolResult[], a: Assumption): number {
-  const i = steps.findIndex((s) => {
-    const blob = JSON.stringify({ args: s.args, data: s.data });
-    if ("category" in a && (s.args.category === a.category || blob.includes(`"category":"${a.category}"`))) return true;
-    if (a.kind === "remove_recurring" && a.recurring_id && blob.includes(a.recurring_id)) return true;
-    return false;
+  const last = (pred: (s: ToolResult) => boolean) => steps.map((s, i) => (pred(s) ? i : -1)).filter((i) => i >= 0).pop() ?? -1;
+  // a step that targeted it (its arguments name the category or payment) beats one whose results merely mention it
+  const targeted = last((s) => {
+    if ("category" in a && String(s.args.category ?? "").toLowerCase() === a.category.toLowerCase()) return true;
+    if (a.kind === "remove_recurring" && a.recurring_id && JSON.stringify(s.args).includes(a.recurring_id)) return true;
+    return !!s.draft?.assumptions.some((x) => x.kind === a.kind && "category" in x && "category" in a && x.category === a.category);
   });
-  return i;
+  if (targeted >= 0) return targeted;
+  return last((s) => {
+    const blob = JSON.stringify(s.data);
+    if ("category" in a && blob.includes(`"category":"${a.category}"`)) return true;
+    return a.kind === "remove_recurring" && !!a.recurring_id && blob.includes(a.recurring_id);
+  });
 }
 
 /**

@@ -7,6 +7,7 @@
 import type { ParseResult, SmsLlmFallback, SmsLlmRow } from "../../../contract/types";
 import { fallbackParseCsv, fallbackParseSms } from "./fallback";
 import { callApi } from "../api";
+import { APP_TODAY } from "../config";
 
 /** The app's LLM fallback: masked server-side, logged in "What the AI sees". */
 const llmFallback: SmsLlmFallback = async (messages) => {
@@ -15,7 +16,7 @@ const llmFallback: SmsLlmFallback = async (messages) => {
 };
 
 export async function ingestSms(text: string): Promise<ParseResult> {
-  return fallbackParseSms(text, { llmFallback });
+  return fallbackParseSms(text, { llmFallback, referenceDate: APP_TODAY });
 }
 
 export async function ingestCsv(text: string, fileName: string): Promise<ParseResult> {

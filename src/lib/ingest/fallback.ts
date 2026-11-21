@@ -6,15 +6,35 @@ import type { ParseResult, SmsLlmFallback, Transaction, UnparsedRow } from "../.
 
 const MON: Record<string, string> = { JAN: "01", FEB: "02", MAR: "03", APR: "04", MAY: "05", JUN: "06", JUL: "07", AUG: "08", SEP: "09", OCT: "10", NOV: "11", DEC: "12" };
 
-export function parseDate(s: string): string | null {
+/** A real calendar date or null: 2026-13-45 and 2026-02-31 are not dates. */
+function ymd(y: number, m: number, d: number): string | null {
+  if (y < 1990 || y > 2100 || m < 1 || m > 12 || d < 1) return null;
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  if (dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return null;
+  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
+/**
+ * Indian dates are day-first. `referenceDate` resolves year-less dates ("12 Nov"): the reference year,
+ * rolled back one year if that would put the date after the reference (a December alert read in January).
+ */
+export function parseDate(s: string, referenceDate?: string): string | null {
   s = s.trim();
   let m: RegExpMatchArray | null;
-  if ((m = s.match(/^(\d{4})-(\d{2})-(\d{2})/))) return `${m[1]}-${m[2]}-${m[3]}`;
-  if ((m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})/))) return `${m[3].length === 2 ? "20" + m[3] : m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
-  if ((m = s.match(/^(\d{1,2})[-\s]?([A-Za-z]{3})[-\s]?(\d{2,4})/))) {
+  const yy = (y: string) => (y.length === 2 ? 2000 + +y : +y);
+  if ((m = s.match(/^(\d{4})-(\d{2})-(\d{2})/))) return ymd(+m[1], +m[2], +m[3]);
+  if ((m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})/))) return ymd(yy(m[3]), +m[2], +m[1]);
+  if ((m = s.match(/^(\d{1,2})[-\s]?([A-Za-z]{3})[-\s]?(\d{2,4})\b/))) {
+    const mm = MON[m[2].toUpperCase()];
+    return mm ? ymd(yy(m[3]), +mm, +m[1]) : null;
+  }
+  // year-less: "12 Nov", "12-Nov"
+  if (referenceDate && (m = s.match(/^(\d{1,2})[-\s]?([A-Za-z]{3})\b/))) {
     const mm = MON[m[2].toUpperCase()];
     if (!mm) return null;
-    return `${m[3].length === 2 ? "20" + m[3] : m[3]}-${mm}-${m[1].padStart(2, "0")}`;
+    const y = +referenceDate.slice(0, 4);
+    const d = ymd(y, +mm, +m[1]);
+    return d && d > referenceDate ? ymd(y - 1, +mm, +m[1]) : d;
   }
   return null;
 }
@@ -60,29 +80,81 @@ const PATTERNS: { re: RegExp; dir: "debit" | "credit"; map: (m: RegExpMatchArray
   { re: /INR ([\d,.]+) credited\s+A\/c no\. XX(\d+)\s+(\S+?),[\s\S]*?\n(?:UPI|IMPS)\/[^/]+\/\d+\/(.+)/i, dir: "credit", map: (m) => ({ amt: m[1], tail: m[2], payee: m[4].split("\n")[0], date: m[3] }) },
 ];
 
-const NOT_TXN = /\bOTP\b|will be debited|is due|declined|failed|reward points|offer/i;
+// SBI UPI credit with no payee: the reference is the only description the message has, kept as written
+PATTERNS.push({
+  re: /A\/c\s*X*(\d+)\s+credited by (?:Rs\.?\s*)?([\d,.]+) on (\S+?)(?:\s+(by \(Ref no \d+\))|\s|$)/i,
+  dir: "credit",
+  map: (m) => ({ amt: m[2], tail: m[1], payee: m[4] ?? m[0].trim(), date: m[3] }),
+});
 
-export async function fallbackParseSms(text: string, opts: { llmFallback?: SmsLlmFallback } = {}): Promise<ParseResult> {
+/**
+ * Not a transaction: OTPs, scheduled/future debits, bill reminders, declines, offers, balance-only messages.
+ * Matched on message SHAPE, never on a single word, so "BEST OFFERS MART", "Refund for failed txn" and an alert
+ * that merely says "never share your OTP" stay transactions. (Narrowed after review of kirti/ found real rows dropped.)
+ */
+export function isNotTransaction(msg: string): boolean {
+  const t = msg.replace(/\s+/g, " ");
+  const moved = /\b(debited|credited|spent|sent|paid|withdrawn|deposited|received|refund(ed)?|reversed)\b/i.test(t);
+  if (/\bOTP\b.{0,60}?\bis\s*:?\s*\d{4,8}\b|\b\d{4,8}\s+is (your )?(OTP|one time password)\b|\bis your (OTP|one time password)\b/i.test(t)) return true;
+  if (/\b(will be debited|is scheduled|scheduled for|due on|is due\b|payment due|bill (of .{1,20} )?is due)/i.test(t)) return true;
+  if (/\b(declined|txn failed|transaction failed|unsuccessful)\b/i.test(t) && !/\b(refund|reversal|reversed|credited)\b/i.test(t)) return true;
+  if (/\b(pre-?approved|apply now|claim (your|now)|congratulations|you are eligible|exclusive offer|limited period offer|reward points)\b/i.test(t)) return true;
+  if (/\b(available balance|avl bal|balance enquiry|balance is)\b/i.test(t) && !moved) return true;
+  return false;
+}
+
+/** Specific bank patterns; returns a transaction-shaped match or a failure reason. */
+function matchPatterns(raw: string, referenceDate?: string) {
+  for (const p of PATTERNS) {
+    const m = raw.match(p.re);
+    if (!m) continue;
+    const v = p.map(m);
+    return { v, dir: p.dir, date: parseDate(v.date, referenceDate), amount: parseAmount(v.amt) };
+  }
+  return null;
+}
+
+/**
+ * Generic debit/credit fallback for banks without a pattern (Kotak, PNB, card alerts). Descriptions stay verbatim:
+ * the payee as written, or the message's own reference when there is no payee. Never a trimmed or invented string.
+ */
+function matchGeneric(raw: string, referenceDate?: string) {
+  const t = raw.replace(/\s+/g, " ");
+  const deb = t.search(/\b(debited|spent|sent|paid|withdrawn)\b/i);
+  const cred = t.search(/\b(credited|deposited|received)\b/i);
+  if (deb < 0 && cred < 0) return null;
+  const dir: "debit" | "credit" = deb >= 0 && (cred < 0 || deb < cred) ? "debit" : "credit";
+  const amt = t.match(/(?:INR|Rs\.?|₹)\s*([\d,]+(?:\.\d{1,2})?)/i);
+  const dm = t.match(/\b(\d{4}-\d{2}-\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{1,2}[-\s]?[A-Za-z]{3}[-\s]?\d{2,4}|\d{1,2}[-\s]?(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*)\b/i);
+  if (!amt || !dm) return null;
+  const tail = t.match(/\b(?:A\/c|Acct|AC|Account|Card)(?:\s*no\.?)?(?:\s*ending)?\s*[X*x]*(\d{3,4})\b/i)?.[1] ?? null;
+  const stop = String.raw`(?=\s+(?:on|ref|refno|upi|via|avl|not you|call|bal|using|and)\b|[.;(]|$)`;
+  const bad = /^(a\/c|acct|account|rs\.?|inr|your|you|the)\b/i;
+  const payee = (dir === "debit" ? t.match(new RegExp(String.raw`\b(?:to VPA|trf to|to|at|towards)\s+([A-Za-z0-9*&@._ /-]{2,60}?)${stop}`, "i")) : t.match(new RegExp(String.raw`\b(?:from|by)\s+([A-Za-z0-9*&@._ /-]{2,60}?)${stop}`, "i")))?.[1]?.trim();
+  const ref = t.match(/\b(?:UPI\s*)?Ref(?:erence)?\.?\s*(?:no\.?)?\s*:?\s*\d{6,16}/i)?.[0];
+  const desc = payee && !bad.test(payee) ? payee : (ref ?? t.slice(0, 60)).trim();
+  return { v: { amt: amt[1], tail: tail ?? "", payee: desc, date: dm[1] }, dir, date: parseDate(dm[1], referenceDate), amount: parseAmount(amt[1]) };
+}
+
+export async function fallbackParseSms(text: string, opts: { llmFallback?: SmsLlmFallback; referenceDate?: string } = {}): Promise<ParseResult> {
   const norm = text.replace(/\r\n/g, "\n").trim();
-  const msgs = /\n\s*\n/.test(norm) ? norm.split(/\n\s*\n/) : norm.split("\n");
+  // CONTRACT 6b: with no blank line, one message per line, unless the paste is a single multi-line message:
+  // no line parses on its own, but the whole paste does (so a list of one-line alerts is never merged)
+  const parses = (s: string) => !!(matchPatterns(s, opts.referenceDate) || matchGeneric(s, opts.referenceDate));
+  const whole = !/\n\s*\n/.test(norm) && norm.includes("\n") && parses(norm) && !norm.split("\n").some((l) => parses(l.trim()));
+  const msgs = /\n\s*\n/.test(norm) ? norm.split(/\n\s*\n/) : whole ? [norm] : norm.split("\n");
   const messages = msgs.map((m) => m.trim()).filter(Boolean);
   const txns: Transaction[] = [];
   const unparsed: UnparsedRow[] = [];
   const toLlm: { index: number; raw: string }[] = [];
   messages.forEach((raw, i) => {
-    if (NOT_TXN.test(raw)) return unparsed.push({ index: i + 1, raw, reason: "not_a_transaction" });
-    for (const p of PATTERNS) {
-      const m = raw.match(p.re);
-      if (!m) continue;
-      const v = p.map(m);
-      const date = parseDate(v.date);
-      const amount = parseAmount(v.amt);
-      if (!date) return unparsed.push({ index: i + 1, raw, reason: "bad_date" });
-      if (!amount) return unparsed.push({ index: i + 1, raw, reason: "bad_amount" });
-      txns.push(base({ date, amount, direction: p.dir, raw_description: v.payee.replace(/\s+/g, " ").trim(), account_tail: v.tail.replace(/\D/g, "").slice(-4) || null, source_line: raw }));
-      return;
-    }
-    toLlm.push({ index: i + 1, raw });
+    if (isNotTransaction(raw)) return unparsed.push({ index: i + 1, raw, reason: "not_a_transaction" });
+    const hit = matchPatterns(raw, opts.referenceDate) ?? matchGeneric(raw, opts.referenceDate);
+    if (!hit) return toLlm.push({ index: i + 1, raw });
+    if (!hit.date) return unparsed.push({ index: i + 1, raw, reason: "bad_date", detail: `date "${hit.v.date}"` });
+    if (!hit.amount) return unparsed.push({ index: i + 1, raw, reason: "bad_amount", detail: `amount "${hit.v.amt}"` });
+    const tail = hit.v.tail.replace(/\D/g, "").slice(-4);
+    txns.push(base({ date: hit.date, amount: hit.amount, direction: hit.dir, raw_description: hit.v.payee.replace(/\s+/g, " ").trim(), account_tail: tail.length >= 3 ? tail : null, source_line: raw }));
   });
   let viaLlm = 0;
   if (toLlm.length) {
@@ -110,16 +182,21 @@ export async function fallbackParseSms(text: string, opts: { llmFallback?: SmsLl
   return { transactions: txns, unparsed, stats: { total_inputs: messages.length, parsed: txns.length, unparsed: unparsed.length, via_llm: viaLlm } };
 }
 
-/** Minimal CSV: quoted fields, header detection by name, signed amount or debit/credit columns. */
+/** CSV: quoted fields ("" escapes), header found below any preamble, signed amount, Dr/Cr suffix or type column, or debit/credit columns. */
 export function fallbackParseCsv(text: string, opts: { sourceFile?: string } = {}): ParseResult {
   const lines = text.replace(/\r\n/g, "\n").split("\n");
   const split = (l: string) => {
     const out: string[] = [];
     let cur = "";
     let q = false;
-    for (const ch of l) {
-      if (ch === '"') q = !q;
-      else if (ch === "," && !q) {
+    for (let k = 0; k < l.length; k++) {
+      const ch = l[k];
+      if (ch === '"') {
+        if (q && l[k + 1] === '"') {
+          cur += '"';
+          k++;
+        } else q = !q;
+      } else if (ch === "," && !q) {
         out.push(cur);
         cur = "";
       } else cur += ch;
@@ -127,15 +204,26 @@ export function fallbackParseCsv(text: string, opts: { sourceFile?: string } = {
     out.push(cur);
     return out.map((x) => x.trim());
   };
-  const hi = lines.findIndex((l) => /date/i.test(l) && /(amount|withdrawal|debit|deposit|credit)/i.test(l));
+  const hi = lines.findIndex((l) => /date|\bdt\b/i.test(l) && /(amount|withdrawal|debit|deposit|credit)/i.test(l));
   if (hi < 0) return { transactions: [], unparsed: [{ index: 1, raw: lines[0] ?? "", reason: "header_undetected" }], stats: { total_inputs: 1, parsed: 0, unparsed: 1, via_llm: 0 } };
+  // account tail from the statement preamble ("Account No : XXXXXXXX4821")
+  const tail = lines
+    .slice(0, hi)
+    .join(" ")
+    .match(/(?:account|a\/c|acct)\s*(?:no\.?|number)?\s*[:.-]?\s*[X*x]*(\d{3,4})\b/i)?.[1] ?? null;
   const h = split(lines[hi]).map((x) => x.toLowerCase());
-  const col = (re: RegExp) => h.findIndex((x) => re.test(x));
-  const cDate = col(/txn date|transaction date|^date|value date/);
+  const col = (re: RegExp, skip: (x: string) => boolean = () => false) => h.findIndex((x) => re.test(x) && !skip(x));
+  const isType = (x: string) => /^(dr\s*\/\s*cr|cr\s*\/\s*dr|type|txn type|debit\s*\/\s*credit)$/.test(x);
+  const isValue = (x: string) => /value\s*(date|dt)/.test(x);
+  // transaction date beats value date
+  let cDate = col(/(txn|transaction|tran)\.?\s*date/);
+  if (cDate < 0) cDate = col(/^date\b|\bdate$/, isValue);
+  if (cDate < 0) cDate = col(/value\s*(date|dt)/);
   const cDesc = col(/narration|description|particulars|remarks|details/);
   const cAmt = col(/^amount/);
-  const cDr = col(/withdrawal|debit|^dr/);
-  const cCr = col(/deposit|credit|^cr/);
+  const cType = col(/./, (x) => !isType(x));
+  const cDr = col(/withdrawal|debit|^dr\b|\(dr\)/, (x) => isType(x) || /balance/.test(x));
+  const cCr = col(/deposit|credit|^cr\b|\(cr\)/, (x) => isType(x) || /balance/.test(x));
   const txns: Transaction[] = [];
   const unparsed: UnparsedRow[] = [];
   let total = 0;
@@ -146,18 +234,26 @@ export function fallbackParseCsv(text: string, opts: { sourceFile?: string } = {
     const c = split(raw);
     const date = parseDate(c[cDate] ?? "");
     if (!date) {
-      unparsed.push({ index: i + 1, raw, reason: c[cDate] ? "bad_date" : "no_date" });
+      const lead = c.find(Boolean) ?? "";
+      if (/^(\*{3}|end of statement|total|closing balance|opening balance|grand total)/i.test(lead)) unparsed.push({ index: i + 1, raw, reason: "not_a_transaction", detail: "summary or footer row" });
+      else unparsed.push({ index: i + 1, raw, reason: c[cDate] ? "bad_date" : "no_date" });
       continue;
     }
     let amount: number | null = null;
     let direction: "debit" | "credit" = "debit";
+    let cellText = "";
     if (cAmt >= 0) {
       const v = c[cAmt] ?? "";
-      amount = parseAmount(v.replace(/(Dr|Cr)$/i, ""));
-      direction = v.trim().startsWith("-") || /Dr$/i.test(v) ? "debit" : "credit";
+      cellText = v;
+      amount = parseAmount(v.replace(/(Dr|Cr)\.?$/i, ""));
+      if (v.trim().startsWith("-") || /Dr\.?$/i.test(v)) direction = "debit";
+      else if (v.trim().startsWith("+") || /Cr\.?$/i.test(v)) direction = "credit";
+      else if (cType >= 0) direction = /^(cr|credit|c)$/i.test(c[cType] ?? "") ? "credit" : /^(dr|debit|d)$/i.test(c[cType] ?? "") ? "debit" : "credit";
+      else direction = "credit";
     } else {
       const dr = parseAmount(c[cDr] ?? "");
       const cr = parseAmount(c[cCr] ?? "");
+      cellText = `${c[cDr] ?? ""}${c[cCr] ?? ""}`;
       if (dr) amount = dr;
       else if (cr) {
         amount = cr;
@@ -165,10 +261,11 @@ export function fallbackParseCsv(text: string, opts: { sourceFile?: string } = {
       }
     }
     if (!amount) {
-      unparsed.push({ index: i + 1, raw, reason: "no_amount" });
+      // an empty cell is a missing amount; text that is not a number is a bad one ("12abc" is not Rs 12)
+      unparsed.push({ index: i + 1, raw, reason: cellText.trim() && !/^[0.,\s]+$/.test(cellText) ? "bad_amount" : "no_amount", ...(cellText.trim() ? { detail: `amount "${cellText.trim()}"` } : {}) });
       continue;
     }
-    txns.push(base({ date, amount, direction, raw_description: (c[cDesc] ?? "").replace(/\s+/g, " ").trim() || "UNKNOWN", source_kind: "csv", source_file: opts.sourceFile ?? "upload.csv", source_line: raw }));
+    txns.push(base({ date, amount, direction, raw_description: (c[cDesc] ?? "").replace(/\s+/g, " ").trim() || "UNKNOWN", account_tail: tail, source_kind: "csv", source_file: opts.sourceFile ?? "upload.csv", source_line: raw }));
   }
   txns.forEach((t, k) => (t.id = `csv_${String(k + 1).padStart(4, "0")}`));
   return { transactions: txns, unparsed, stats: { total_inputs: total, parsed: txns.length, unparsed: unparsed.length, via_llm: 0 } };

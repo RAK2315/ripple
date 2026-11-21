@@ -1,6 +1,15 @@
-# RIPPLE Contract v1.0.0 — FROZEN
+# RIPPLE Contract v1.1.0 — FROZEN
 
 **Frozen as of setup, 21 Nov 2026, ~13:40 IST.** Neither side (Rehaan's `src/`, Kirti's `kirti/`) changes this file, `contract/types.ts` or `contract/transaction.schema.json` on their own. If a change is genuinely needed, it is agreed by both people first, then this file, `types.ts`, the schema and `kirti/BRIEF.md` are updated in one commit.
+
+## Amendments
+
+**v1.1.0, 21 Nov 2026 (agreed by Rehaan and Kirti; additive, backward compatible).** Every v1.0.0 transaction, parse result and fixture is still valid v1.1.0.
+
+1. **New source kind `"xlsx"`** for spreadsheet exports (`.xlsx` and `.xls`, e.g. Paytm and PhonePe passbooks). For these rows `source_file` is the uploaded file name, `source_line` is the row's cells joined CSV-style (date normalised to `DD/MM/YYYY`, time appended when the export has a separate time column), and an `UnparsedRow.index` is the spreadsheet row number (1-based, as Excel shows it). Before this amendment such rows had to be labelled `"csv"`, which was wrong.
+2. **SMS splitting clarification (§4).** The rule "otherwise each non-empty line is one message" applies to a paste of several one-line messages. A paste that is a single multi-line message (no line parses as a transaction on its own, but the whole paste does) is one message. This is what the §6b worked example always required; both parsers now implement it.
+
+`kirti/` is unchanged by this amendment: it already treats a single multi-line paste as one message, and it never emits `"xlsx"`. `kirti/BRIEF.md` describes v1.0.0, which remains valid. `Fixture.contract_version` accepts `"1.0.0"` or `"1.1.0"`.
 
 Machine-readable source of truth: `contract/types.ts` (TypeScript) and `contract/transaction.schema.json` (JSON Schema). If prose here and `types.ts` ever disagree, `types.ts` wins.
 
@@ -37,7 +46,7 @@ This is what lets both workstreams run in parallel without blocking or breaking 
 | `direction` | string | yes | `"debit"` or `"credit"` |
 | `raw_description` | string | yes | non-empty. CSV: the description cell. SMS: the merchant/payee/narration text as written in the SMS (e.g. `SWIGGY`, `NETFLIX.COM`, `NEFT CR-...-SALARY NOV 2026`). |
 | `account_tail` | string \| null | yes (nullable) | `^\d{3,4}$` or null |
-| `source_kind` | string | yes | `"csv"`, `"sms"`, `"pdf"`, `"upi_screenshot"`, `"synthetic"` |
+| `source_kind` | string | yes | `"csv"`, `"xlsx"`, `"sms"`, `"pdf"`, `"upi_screenshot"`, `"synthetic"` (`"xlsx"` since v1.1.0) |
 | `source_file` | string | yes | uploaded file name, `"sms-paste"`, or `"synthetic"` |
 | `source_line` | string | yes | the verbatim original input: the full CSV line, or the full SMS text (multi-line SMS keep their `\n`) |
 | `merchant_normalized` | string \| null | yes | parsers: `null` |
@@ -90,7 +99,7 @@ Invariant: `stats.parsed === transactions.length`, `stats.unparsed === unparsed.
 
 `index` is 1-based: CSV line number in the file (header is line 1, so the first data row is 2); SMS message number in split order.
 
-**SMS splitting rule:** if the pasted text contains a blank line, each blank-line-separated block is one message. Otherwise each non-empty line is one message.
+**SMS splitting rule:** if the pasted text contains a blank line, each blank-line-separated block is one message. Otherwise each non-empty line is one message, unless the paste is a single multi-line message: no line parses as a transaction on its own but the whole paste does, in which case the whole paste is one message (v1.1.0 clarification; this is what §6b requires).
 
 **Why the LLM fallback is injected:** the app masks account numbers, names and phone numbers before any model call and shows the user the exact masked payload ("what the AI sees"). So the model call lives in `src/`. `kirti/` may ship its own fallback for testing, but the app always passes its own.
 
@@ -100,7 +109,7 @@ Invariant: `stats.parsed === transactions.length`, `stats.unparsed === unparsed.
 
 ```ts
 interface Fixture {
-  contract_version: "1.0.0";
+  contract_version: "1.0.0" | "1.1.0";
   generated_at: string;                 // ISO datetime
   user: { name: string; city: string };
   transactions: Transaction[];          // sorted by date asc, then id; source_kind "synthetic"

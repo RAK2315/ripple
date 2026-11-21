@@ -1,7 +1,7 @@
 /**
  * Excel import (.xlsx / .xls) for bank and wallet exports. Runs entirely in the browser: the file never leaves the device.
  * Sheet, header and column detection are heuristic; Paytm's passbook export is the known-good case.
- * Output follows CONTRACT.md. The contract has no "xlsx" source kind (it is frozen), so rows use source_kind "csv": tabular export.
+ * Output follows CONTRACT.md v1.1.0: rows use source_kind "xlsx", and unparsed indexes are spreadsheet row numbers.
  */
 import type { ParseResult, Transaction, UnparsedRow } from "../../../contract/types";
 
@@ -311,7 +311,7 @@ export function parseSheet(a: SheetAnalysis, map: ColumnMap, fileName: string): 
         direction,
         raw_description: desc,
         account_tail: a.accountTail,
-        source_kind: "csv",
+        source_kind: "xlsx",
         source_file: fileName,
         source_line,
         merchant_normalized: null,

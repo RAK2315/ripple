@@ -48,7 +48,7 @@ describe("Paytm passbook export", () => {
     ]);
 
     const by = (d: string) => r.transactions.find((t) => t.raw_description === d)!;
-    expect(by("Paid to Burger King")).toMatchObject({ date: "2026-10-02", amount: 22996, direction: "debit", source_kind: "csv", source_file: "paytm.xlsx" });
+    expect(by("Paid to Burger King")).toMatchObject({ date: "2026-10-02", amount: 22996, direction: "debit", source_kind: "xlsx", source_file: "paytm.xlsx" });
     expect(by("Money sent to Karan Malhotra")).toMatchObject({ amount: 150000, direction: "debit" });
     expect(by("Received from Ananya Rao")).toMatchObject({ amount: 200000, direction: "credit" });
     expect(by("Paid to Uber India")).toMatchObject({ amount: 18650, direction: "debit" }); // numeric cell, pre-signed

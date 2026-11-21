@@ -1,12 +1,13 @@
 /**
  * RIPPLE FROZEN CONTRACT — machine-readable types.
  * Human-readable spec: ../CONTRACT.md. Frozen at setup, 21 Nov 2026.
+ * v1.1.0 (agreed amendment, additive): source kind "xlsx"; SMS single multi-line paste clarified. See CONTRACT.md "Amendments".
  * Neither side edits this file unilaterally. Changes happen by agreement only.
  *
  * Imports allowed in this file: none. It must stay dependency-free.
  */
 
-export const CONTRACT_VERSION = "1.0.0";
+export const CONTRACT_VERSION = "1.1.0";
 
 /** Direction of money relative to the user's account. */
 export type Direction = "debit" | "credit";
@@ -41,7 +42,7 @@ export type Category = (typeof CATEGORIES)[number];
 export type CategorySource = "rule" | "starter_list" | "llm" | "user";
 
 /** Where a transaction came from. */
-export type SourceKind = "csv" | "sms" | "pdf" | "upi_screenshot" | "synthetic";
+export type SourceKind = "csv" | "xlsx" | "sms" | "pdf" | "upi_screenshot" | "synthetic";
 
 export interface Transaction {
   /** Unique within its ParseResult/Fixture. Pattern ^[a-z0-9_-]{1,64}$. */
@@ -161,7 +162,7 @@ export interface Advice {
 }
 
 export interface Fixture {
-  contract_version: string; // "1.0.0"
+  contract_version: string; // "1.0.0" or "1.1.0"
   /** ISO 8601 datetime when generated. */
   generated_at: string;
   user: { name: string; city: string };

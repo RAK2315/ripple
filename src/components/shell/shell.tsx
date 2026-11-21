@@ -7,6 +7,7 @@ import { useUi } from "@/lib/ui";
 import { ProvenanceDrawer } from "./provenance-drawer";
 import { AiPanel } from "./ai-panel";
 import { CoachDrawer } from "@/components/coach/coach-drawer";
+import { InvestigateDrawer, useInvestigate } from "@/components/investigate/investigate-drawer";
 import { ThemeToggle } from "./theme-toggle";
 import { Mark } from "./mark";
 import { useEffect } from "react";
@@ -88,6 +89,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
             Ask RIPPLE
           </button>
           <button
+            onClick={() => useInvestigate.getState().setOpen(true)}
+            className="w-full rounded-md border border-ink px-3 py-2 text-left text-sm font-medium text-ink transition-colors hover:bg-paper"
+          >
+            Investigate
+          </button>
+          <button
             onClick={() => setAiPanel(true)}
             className="w-full rounded-md border border-line px-3 py-2 text-left text-xs text-muted transition-colors hover:border-line-strong hover:bg-paper"
           >
@@ -105,6 +112,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           computed by code, never by a language model.
         </footer>
       </div>
+      {hydrated && <InvestigateDrawer />}
       {hydrated && <ProvenanceDrawer />}
       {hydrated && <AiPanel />}
       {hydrated && <CoachDrawer />}

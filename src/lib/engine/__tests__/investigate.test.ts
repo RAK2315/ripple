@@ -1,0 +1,175 @@
+import { describe, it, expect } from "vitest";
+import fixture from "../../../../contract/fixture.json";
+import type { Advice, Transaction } from "../../types";
+import { categorizeAll } from "../categorize";
+import { detectRecurring } from "../recurring";
+import { computeBaseline } from "../projection";
+import { DEMO_GOALS, DEMO_PROFILE } from "../../seed";
+import {
+  cleanExplanation,
+  fallbackPlanner,
+  MAX_TOOL_CALLS,
+  runInvestigation,
+  runTool,
+  TOOL_NAMES,
+  type InvestigateCtx,
+  type PlannerStep,
+  type ToolResult,
+} from "../investigate";
+import { buildInvestigatePrompt } from "../../ai/investigate";
+
+const T = "2026-11-20";
+const txns = categorizeAll(fixture.transactions as Transaction[], [], {}, {});
+const recurring = detectRecurring(txns, T);
+const ctx: InvestigateCtx = {
+  txns,
+  recurring,
+  baseline: computeBaseline(txns, recurring, DEMO_PROFILE, [], T),
+  goals: DEMO_GOALS,
+  profile: DEMO_PROFILE,
+  mainAssumptions: [],
+  advice: fixture.advice as Advice[],
+  today: T,
+};
+const ids = new Set(txns.map((t) => t.id));
+
+function contractShaped(r: ToolResult) {
+  expect(TOOL_NAMES).toContain(r.tool);
+  expect(typeof r.finding).toBe("string");
+  expect(r.finding.length).toBeGreaterThan(0);
+  expect(Array.isArray(r.ids)).toBe(true);
+  // provenance: every row a tool reports touching is a real transaction id
+  expect(r.ids.every((id) => ids.has(id))).toBe(true);
+  expect(typeof r.data).toBe("object");
+  // money reaches the model only as strings our formatter wrote, never as raw paise
+  const money = JSON.stringify(r.data).match(/₹[\d,]+/g) ?? [];
+  expect(money.every((m) => /^₹\d{1,3}(,\d{2})*(,\d{3})?$|^₹\d{1,3}$/.test(m) || /^₹[\d,]+$/.test(m))).toBe(true);
+}
+
+describe("investigation tools wrap the engine and return contract-shaped results", () => {
+  it("query_transactions filters by category and reports engine totals", () => {
+    const r = runTool(ctx, "query_transactions", { category: "Dining", date_from: "2026-08-01" });
+    contractShaped(r);
+    const rows = txns.filter((t) => t.direction === "debit" && t.category === "Dining" && t.date >= "2026-08-01");
+    expect(r.ids.sort()).toEqual(rows.map((t) => t.id).sort());
+    expect(r.data.count).toBe(rows.length);
+  });
+
+  it("get_recurring, get_goals, get_profile, get_category_trend all return findings with real ids", () => {
+    for (const [tool, args] of [
+      ["get_recurring", { status: "new" }],
+      ["get_recurring", {}],
+      ["get_goals", {}],
+      ["get_profile", {}],
+      ["get_category_trend", { category: "Dining", months: 6 }],
+    ] as const) {
+      const r = runTool(ctx, tool, args);
+      contractShaped(r);
+      expect(r.error).toBeFalsy();
+    }
+    const goals = runTool(ctx, "get_goals").data.goals as { name: string }[];
+    expect(goals.map((g) => g.name)).toEqual(["Bike", "Laptop"]);
+    expect((runTool(ctx, "get_category_trend", { category: "Dining", months: 6 }).data.monthly as unknown[]).length).toBe(6);
+  });
+
+  it("run_projection and create_scenario compute the delta with our engine; create_scenario only drafts", () => {
+    const cut = { assumptions: [{ kind: "category_pct", category: "Dining", pct: -20 }] };
+    const p = runTool(ctx, "run_projection", cut);
+    contractShaped(p);
+    expect(p.draft).toBeUndefined();
+    const c = runTool(ctx, "create_scenario", { name: "Cut dining", ...cut });
+    contractShaped(c);
+    expect(c.draft!.surplus_after).toBeGreaterThan(c.draft!.surplus_before);
+    expect(c.draft!.assumptions).toEqual([{ kind: "category_pct", category: "Dining", pct: -20 }]);
+  });
+
+  it("bad calls become error steps, never throws", () => {
+    expect(runTool(ctx, "delete_everything", {}).error).toBe(true);
+    expect(runTool(ctx, "get_category_trend", { category: "Bitcoin" }).error).toBe(true);
+    expect(runTool(ctx, "run_projection", { assumptions: "nonsense" }).error).toBe(true);
+    const empty = runTool(ctx, "query_transactions", { merchant: "no such merchant zzz" });
+    expect(empty.ids).toEqual([]);
+    expect(empty.data.count).toBe(0);
+  });
+
+  it("the model's explanation never carries a figure", () => {
+    expect(cleanExplanation("Dining is growing fastest. You spent ₹6,800 last month. Cutting it brings the bike closer.")).toBe(
+      "Dining is growing fastest. Cutting it brings the bike closer.",
+    );
+    expect(cleanExplanation("It went up 40%.")).toBeNull();
+  });
+});
+
+describe("privacy: the investigation prompt", () => {
+  it("masks payee names, phone numbers and UPI handles from tool results and the question", () => {
+    const steps = (["get_recurring", "get_profile"] as const).map((t) => runTool(ctx, t, {}));
+    const items = steps[0].data.items as { merchant: string; category: string }[];
+    // the fixture pays rent and a family transfer to people; the tool reports them by name on the user's screen
+    const payees = ["Ramesh Kulkarni", "Sunita Mehta"];
+    for (const p of payees) expect(items.map((i) => i.merchant)).toContain(p);
+    steps[0].data.items = [...items, { merchant: "x", category: "Family Transfer" }];
+    const prompt = buildInvestigatePrompt({
+      question: `Why do I pay ${payees[0]} so much? My number is 9876543210, UPI ramesh.k@okicici`,
+      steps: steps.map((s) => ({ tool: s.tool, args: s.args, data: s.data })),
+      mustConclude: false,
+      context: { today: T, goals: DEMO_GOALS.map((g) => ({ id: g.id, name: g.name })) },
+    });
+    for (const p of payees) expect(prompt).not.toContain(p);
+    expect(prompt).not.toContain("9876543210");
+    expect(prompt).not.toContain("ramesh.k@");
+    expect(prompt).toContain("[NAME]");
+    expect(prompt).toContain("Country Delight"); // merchants and categories stay: the model needs them
+    expect(prompt).toContain("Family Transfer");
+  });
+});
+
+describe("the chain", () => {
+  it("terminates at the five-call cap even if the planner never stops", async () => {
+    let calls = 0;
+    const greedy = async (): Promise<PlannerStep> => {
+      calls++;
+      return { type: "call", tool: "get_profile", args: {} };
+    };
+    const seen: ToolResult[] = [];
+    const out = await runInvestigation(ctx, "why?", greedy, (r) => seen.push(r));
+    expect(out.steps).toHaveLength(MAX_TOOL_CALLS);
+    expect(seen).toHaveLength(MAX_TOOL_CALLS);
+    expect(out.capped).toBe(true);
+    expect(calls).toBe(MAX_TOOL_CALLS + 1); // the sixth ask is told to conclude, and is overruled
+    expect(out.proposal).not.toBeNull();
+  });
+
+  it("tells the planner to conclude at the cap and uses its proposal, priced by our engine", async () => {
+    const flags: boolean[] = [];
+    const planner = async ({ mustConclude }: { mustConclude: boolean }): Promise<PlannerStep> => {
+      flags.push(mustConclude);
+      return mustConclude
+        ? { type: "conclude", explanation: "Dining keeps growing.", proposal: { name: "Trim dining", assumptions: [{ kind: "category_pct", category: "Dining", pct: -25 }] } }
+        : { type: "call", tool: "get_goals", args: {} };
+    };
+    const out = await runInvestigation(ctx, "bike?", planner);
+    expect(flags).toEqual([false, false, false, false, false, true]);
+    expect(out.proposal?.kind).toBe("scenario");
+    if (out.proposal?.kind === "scenario") expect(out.proposal.draft.surplus_after).toBeGreaterThan(out.proposal.draft.surplus_before);
+  });
+
+  it("a planner that throws still yields an answer; the fallback chain stays under the cap", async () => {
+    const broken = await runInvestigation(ctx, "?", async () => {
+      throw new Error("down");
+    });
+    expect(broken.steps).toHaveLength(0);
+    expect(broken.explanation.length).toBeGreaterThan(0);
+    const fb = await runInvestigation(ctx, "Why am I falling behind on the bike goal?", fallbackPlanner(ctx));
+    expect(fb.steps.length).toBeLessThanOrEqual(MAX_TOOL_CALLS);
+    expect(fb.steps.map((s) => s.tool)).toEqual(["get_goals", "get_profile", "get_recurring", "get_category_trend"]);
+    expect(fb.proposal?.kind).toBe("advice");
+    if (fb.proposal?.kind === "advice") expect(fb.proposal.monthly_saving).toBeGreaterThan(0);
+  });
+
+  it("an empty dataset never crashes any tool", async () => {
+    const bare: InvestigateCtx = { ...ctx, txns: [], recurring: [], baseline: computeBaseline([], [], DEMO_PROFILE, [], T), advice: [] };
+    for (const t of TOOL_NAMES) expect(() => runTool(bare, t, { category: "Dining", assumptions: [] })).not.toThrow();
+    const out = await runInvestigation(bare, "?", fallbackPlanner(bare));
+    expect(out.proposal).toBeNull();
+  });
+});

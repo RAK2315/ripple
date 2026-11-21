@@ -1,3 +1,4 @@
+import { aiRoute } from "@/lib/ai/meta";
 import { z } from "zod";
 import { CATEGORIES } from "../../../../contract/types";
 import { mask } from "@/lib/ai/mask";
@@ -32,7 +33,7 @@ const SYSTEM = `Convert a "what if" sentence about personal finances into struct
 - goal_change: change a goal's target amount or date, by goal_id
 "Eating out", food delivery, restaurants = Dining. Moving city usually implies a rent change only if the user states one.`;
 
-export async function POST(req: Request) {
+export const POST = aiRoute(async function POST(req: Request) {
   const { text, recurring, goals, categoriesWithSpend, today } = (await req.json()) as {
     text: string;
     recurring: { id: string; merchant: string; category: string }[];
@@ -66,4 +67,4 @@ export async function POST(req: Request) {
   }
   const name = res?.name ?? text.replace(/^what if\s*/i, "").slice(0, 40);
   return Response.json({ ok: true, data: { name, assumptions }, usedModel, masked: prompt });
-}
+});

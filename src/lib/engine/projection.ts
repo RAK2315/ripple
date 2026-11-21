@@ -14,6 +14,10 @@ export interface Baseline {
   /** std dev of total monthly variable spend over last 6 complete months */
   variableSigma: number;
   completeMonths: string[];
+  /** where income came from: the user's own figure, a detected salary, or nothing (too little history) */
+  incomeSource: "profile" | "detected" | "none";
+  /** distinct calendar months in the imported history */
+  historyMonths: number;
 }
 
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
@@ -71,6 +75,8 @@ export function computeBaseline(
     variableIds,
     variableSigma,
     completeMonths: last6,
+    incomeSource: profile.monthly_income != null ? "profile" : salary ? "detected" : "none",
+    historyMonths: new Set(txns.map((t) => ym(t.date))).size,
   };
 }
 

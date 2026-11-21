@@ -6,7 +6,7 @@ import { chainAssumptions, useDerived } from "@/lib/derived";
 import { useUi } from "@/lib/ui";
 import { callApi } from "@/lib/api";
 import { APP_TODAY } from "@/lib/config";
-import { formatINR, monthLabel, uid } from "@/lib/format";
+import { formatINR, monthLabelLong, uid } from "@/lib/format";
 import {
   fallbackPlanner,
   MAX_TOOL_CALLS,
@@ -16,12 +16,13 @@ import {
   type PlannerInput,
   type PlannerStep,
   type ToolResult,
+  withGoal,
 } from "@/lib/engine/investigate";
 
 /** Own open/close state, so this mode shares nothing with the coach drawer and can be removed on its own. */
 export const useInvestigate = create<{ open: boolean; setOpen: (o: boolean) => void }>((set) => ({ open: false, setOpen: (open) => set({ open }) }));
 
-const SUGGESTIONS = ["Why am I falling behind on the bike goal?", "What is eating into my surplus?", "Can I get the laptop sooner?"];
+const SUGGESTIONS = ["Why am I falling behind on the bike goal?", "I want an iPhone 18 for ₹1,40,000 in 4 months. How do I save for it?", "What is eating into my surplus?"];
 
 const fmtArgs = (a: Record<string, unknown>) =>
   Object.entries(a)
@@ -104,19 +105,21 @@ export function InvestigateDrawer() {
   function approve() {
     const p = result?.proposal;
     if (!p) return;
+    const goal = p.kind === "goal" ? p.goal : p.goal;
+    // a goal the chain drafted goes first, as it was tested; existing goals keep their order behind it
+    if (goal && !s.goals.some((g) => g.id === goal.id)) s.setGoals(withGoal(s.goals, goal));
     if (p.kind === "scenario") {
       s.upsertScenario({ id: uid("sc"), name: p.draft.name, parent_id: "main", assumptions: p.draft.assumptions, created_at: new Date().toISOString(), is_main: false });
-      setApproved(`Scenario “${p.draft.name}” created. Open Scenarios to edit or compare it.`);
+      setApproved(`${goal ? `Goal “${goal.name}” added and s` : "S"}cenario “${p.draft.name}” created. Open Scenarios to edit or compare it.`);
       showToast(`Scenario “${p.draft.name}” created`);
     } else {
-      const added = s.addLiveAdvice([{ advice: p.advice, evidence: p.evidence }]);
-      setApproved(added ? "Written to your advice history. The Ghost now tracks it." : "That advice is already in your history.");
-      showToast(added ? "Advice added" : "Advice already in your history", added ? "ok" : "warn");
+      setApproved(`Goal “${p.goal.name}” added. Edit it on Goals & Profile.`);
+      showToast(`Goal “${p.goal.name}” added`);
     }
   }
 
   const p = result?.proposal ?? null;
-  const saving = p ? (p.kind === "scenario" ? p.draft.surplus_after - p.draft.surplus_before : p.monthly_saving) : 0;
+  const saving = p && p.kind === "scenario" ? p.draft.surplus_after - p.draft.surplus_before : 0;
 
   return (
     <div className="no-print fixed inset-0 z-40 flex justify-end bg-[var(--scrim)]" onClick={() => setOpen(false)}>
@@ -182,10 +185,22 @@ export function InvestigateDrawer() {
           {result && (
             <div className="space-y-3" data-testid="investigation-result">
               {result.capped && <div className="text-xs text-muted">Reached the {MAX_TOOL_CALLS}-call cap and concluded with what it had.</div>}
-              <div className="rounded-xl bg-paper px-4 py-3 text-sm leading-relaxed">{result.explanation}</div>
+              <div className={`rounded-xl px-4 py-3 text-sm leading-relaxed ${result.ask ? "border border-accent/40 bg-accent-soft/40" : "bg-paper"}`} data-testid={result.ask ? "investigation-ask" : undefined}>
+                {result.explanation}
+              </div>
               {p && (
                 <div className="rounded-xl border border-accent/40 bg-accent-soft/40 p-4 text-sm" data-testid="investigation-proposal">
-                  <div className="text-xs uppercase tracking-wide text-accent">Proposed action · needs your approval</div>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <div className="text-xs uppercase tracking-wide text-accent">Proposed action · needs your approval</div>
+                    <div className="text-[11px] text-muted" data-testid="proposal-source">
+                      from step {p.step}: <code>{steps[p.step - 1]?.tool}</code>
+                    </div>
+                  </div>
+                  {p.kind === "scenario" && p.goal && (
+                    <div className="mt-1 text-xs text-muted">
+                      Adds goal {p.goal.name}: {formatINR(p.goal.target_amount)} by {monthLabelLong(p.goal.target_date.slice(0, 7))}
+                    </div>
+                  )}
                   {p.kind === "scenario" ? (
                     <>
                       <div className="mt-1 font-medium">New scenario: {p.draft.name}</div>
@@ -198,21 +213,23 @@ export function InvestigateDrawer() {
                         Surplus {formatINR(p.draft.surplus_before)} → {formatINR(p.draft.surplus_after)}/month
                         {p.draft.goals
                           .filter((g) => g.before !== g.after)
-                          .map((g) => ` · ${g.name} ${g.before ? monthLabel(g.before) : "—"} → ${g.after ? monthLabel(g.after) : "—"}`)
+                          .map((g) => ` · ${g.name} ${g.before ? monthLabelLong(g.before) : "—"} → ${g.after ? monthLabelLong(g.after) : "—"}`)
                           .join("")}
                       </div>
                     </>
                   ) : (
                     <>
-                      <div className="mt-1 font-medium">Add to your advice: {p.label}</div>
-                      <div className="num mt-1 text-xs">Saves about {formatINR(p.monthly_saving)}/month (priced by RIPPLE&apos;s engine)</div>
+                      <div className="mt-1 font-medium">
+                        Add goal: {p.goal.name}, {formatINR(p.goal.target_amount)} by {monthLabelLong(p.goal.target_date.slice(0, 7))}
+                      </div>
+                      <div className="mt-1 text-xs text-muted">{p.finding}</div>
                     </>
                   )}
-                  {(p.kind === "scenario" ? p.ids : p.evidence).length > 0 && (
+                  {p.ids.length > 0 && (
                     <button
                       className="mt-2 text-xs text-accent underline-offset-2 hover:underline"
                       onClick={() =>
-                        showProvenance("Proposed action", p.kind === "scenario" ? p.ids : p.evidence, saving > 0 ? `Changes monthly surplus by ${formatINR(saving, { sign: true })}` : undefined)
+                        showProvenance("Proposed action", p.ids, saving > 0 ? `Changes monthly surplus by ${formatINR(saving, { sign: true })}` : undefined)
                       }
                     >
                       Rows behind it
@@ -226,7 +243,7 @@ export function InvestigateDrawer() {
                     ) : (
                       <>
                         <button onClick={approve} className="rounded-md bg-ink px-3 py-1.5 text-xs font-medium text-paper hover:opacity-90">
-                          {p.kind === "scenario" ? "Create scenario" : "Add to advice"}
+                          {p.kind === "scenario" ? (p.goal ? "Add goal and create scenario" : "Create scenario") : "Add goal"}
                         </button>
                         <button onClick={() => setApproved("Dismissed. Nothing was changed.")} className="rounded-md border border-line px-3 py-1.5 text-xs text-muted hover:text-ink">
                           Dismiss

@@ -1,11 +1,10 @@
 import type { Advice, Assumption, Category, Goal, Profile, Recurring, RecurringStatus, Transaction } from "../types";
 import type { RawAssumption } from "../scenario-parse";
 import { CATEGORIES } from "../../../contract/types";
-import { formatINR, monthLabel } from "../format";
-import { ym } from "./dates";
+import { formatINR, monthLabel, monthLabelLong } from "../format";
+import { addMonths, daysInMonth, monthsBetween, ym } from "./dates";
 import { completeMonthsBefore, project, type Baseline, type Projection } from "./projection";
 import { convertRaw, describeAssumption } from "./scenario";
-import { adviceId, findOpportunities, freshOpportunities } from "./opportunities";
 
 /**
  * Investigation agent, tool layer. The model plans and chooses which tool to call; every tool here is a thin wrapper
@@ -23,6 +22,7 @@ export const TOOL_NAMES = [
   "get_category_trend",
   "run_projection",
   "create_scenario",
+  "create_goal",
 ] as const;
 export type ToolName = (typeof TOOL_NAMES)[number];
 
@@ -37,6 +37,8 @@ export interface InvestigateCtx {
   mainAssumptions: Assumption[];
   advice: Advice[];
   today: string;
+  /** the user's question: create_goal only accepts a price the user actually stated in it */
+  question?: string;
 }
 
 export interface ScenarioDraft {
@@ -58,6 +60,10 @@ export interface ToolResult {
   /** compact facts sent (masked) back to the model; money already formatted by our code */
   data: Record<string, unknown>;
   draft?: ScenarioDraft;
+  /** create_goal: the goal drafted for approval (not saved) */
+  goal?: Goal;
+  /** something only the user can supply (an unstated price): the chain asks instead of guessing */
+  needsInput?: string;
   error?: boolean;
 }
 
@@ -69,7 +75,7 @@ const asCategory = (v: unknown): Category | undefined => {
 };
 const sum = (xs: Transaction[]) => xs.reduce((a, t) => a + t.amount, 0);
 const merchantOf = (t: Transaction) => t.merchant_normalized ?? t.raw_description;
-const goalMonth = (m: string | null) => (m ? monthLabel(m) : "not within 6 years");
+const goalMonth = (m: string | null) => (m ? monthLabelLong(m) : "not within 6 years");
 
 function mainProjection(ctx: InvestigateCtx, extra: Assumption[] = []): Projection {
   return project(ctx.baseline, [...ctx.mainAssumptions, ...extra], ctx.goals, ctx.profile.current_balance, ctx.today, 24);
@@ -172,10 +178,13 @@ function getProfile(ctx: InvestigateCtx): ToolResult {
   return {
     tool: "get_profile",
     args: {},
-    finding: `Income ${formatINR(plan.income)}/month; fixed ${formatINR(plan.fixed)}, variable ${formatINR(plan.variable)}, leaving ${formatINR(plan.surplus)} surplus.`,
+    finding:
+      ctx.baseline.incomeSource === "none" && plan.income <= 0
+        ? `Income not detected (no regular salary in ${ctx.baseline.historyMonths} month${ctx.baseline.historyMonths === 1 ? "" : "s"} of history; enter it on Goals & Profile); fixed ${formatINR(plan.fixed)}, variable ${formatINR(plan.variable)}.`
+        : `Income ${formatINR(plan.income)}/month; fixed ${formatINR(plan.fixed)}, variable ${formatINR(plan.variable)}, leaving ${formatINR(plan.surplus)} surplus.`,
     ids: ctx.baseline.incomeIds,
     data: {
-      monthly_income: formatINR(plan.income),
+      monthly_income: ctx.baseline.incomeSource === "none" && plan.income <= 0 ? "not detected (too little history)" : formatINR(plan.income),
       fixed_monthly: formatINR(plan.fixed),
       variable_monthly: formatINR(plan.variable),
       surplus_monthly: formatINR(plan.surplus),
@@ -219,7 +228,8 @@ export function draftFromAssumptions(ctx: InvestigateCtx, name: string, assumpti
   const before = mainProjection(ctx);
   const after = mainProjection(ctx, assumptions);
   return {
-    name: name.trim().slice(0, 60) || "Investigation fix",
+    // unnamed: name it after what it changes ("Dining down 50%"), never a generic label
+    name: name.trim().slice(0, 60) || assumptions.map((a) => describeAssumption(a, ctx.goals)).join(", ").slice(0, 60) || "Investigation fix",
     assumptions,
     lines: assumptions.map((a) => describeAssumption(a, ctx.goals)),
     surplus_before: before.plan.surplus,
@@ -244,8 +254,7 @@ export function draftSummary(d: ScenarioDraft): string {
 }
 
 function projectionTool(ctx: InvestigateCtx, tool: "run_projection" | "create_scenario", args: Record<string, unknown>): ToolResult {
-  const name = str(args.name) ?? "What-if";
-  const d = draftScenario(ctx, name, args.assumptions as RawAssumption[]);
+  const d = draftScenario(ctx, str(args.name) ?? "", args.assumptions as RawAssumption[]);
   if (!d) return { tool, args, finding: "No usable assumptions to project.", ids: [], data: { error: "no valid assumptions" }, error: true };
   const data = {
     assumptions: d.lines,
@@ -255,8 +264,116 @@ function projectionTool(ctx: InvestigateCtx, tool: "run_projection" | "create_sc
   };
   const finding =
     tool === "create_scenario" ? `Drafted "${d.name}" for your approval (not applied): ${draftSummary(d)}.` : `With ${d.lines.join("; ")}: ${draftSummary(d)}.`;
-  return { tool, args, finding, ids: draftIds(ctx, d), data, ...(tool === "create_scenario" ? { draft: d } : {}) };
+  return { tool, args, finding, ids: draftIds(ctx, d), data, draft: d };
 }
+
+// ---------- purchase intent ----------
+
+/** Rupee amounts the user literally wrote ("₹1,40,000", "1.4 lakh", "140k", "rs 80000"). Model names (iPhone 18) and durations are not prices. */
+export function statedAmounts(q: string): number[] {
+  const out: number[] = [];
+  const re = /(₹|rs\.?|inr)?\s*(\d[\d,]*(?:\.\d+)?)\s*(lakhs|lakh|lac|l|thousand|k|crore|cr)?\b(?!\s*(?:months?|mo|years?|yrs?|weeks?|days?|%|percent))/gi;
+  for (const m of q.matchAll(re)) {
+    const at = (m.index ?? 0) + m[0].indexOf(m[2]);
+    const prev = q.slice(Math.max(0, at - 1), at);
+    if (!m[1] && /[A-Za-z0-9]/.test(prev)) continue; // part of a word or a model name ("iPhone18")
+    const n = parseFloat(m[2].replace(/,/g, ""));
+    const u = (m[3] ?? "").toLowerCase();
+    const v = u === "k" || u === "thousand" ? n * 1e3 : u.startsWith("l") ? n * 1e5 : u.startsWith("c") ? n * 1e7 : n;
+    if (m[1] || u || v >= 1000) out.push(Math.round(v));
+  }
+  return [...new Set(out)];
+}
+
+/** "in 4 months", "within a year", "in 2 years" → months, or null. */
+export function statedMonths(q: string): number | null {
+  const m = q.match(/\b(?:in|within|over|next)\s+(\d+|a|an|one|two|three|six)\s*(months?|years?|yrs?)\b/i);
+  if (!m) return null;
+  const words: Record<string, number> = { a: 1, an: 1, one: 1, two: 2, three: 3, six: 6 };
+  const n = words[m[1].toLowerCase()] ?? +m[1];
+  return /^y/i.test(m[2]) ? n * 12 : n;
+}
+
+export function isPurchaseIntent(q: string): boolean {
+  return /\b(buy|purchase|save (up )?for|afford|want (a|an|to buy|to get)|get (a|an|myself)|planning (a|an|to buy))\b/i.test(q);
+}
+
+/** The item named in a purchase question ("I want an iPhone 18, how do I…" → "iPhone 18"). */
+export function purchaseItem(q: string): string | null {
+  const m = q.match(
+    /\b(?:buy|purchase|save (?:up )?for|afford|want|get|planning)\s+(?:to buy\s+|to get\s+|myself\s+)?(?:(?:an|a|the)\s+)?([A-Za-z][\w .+-]{1,40}?)(?=\s*(?:[,.?!;]|\bin\b|\bwithin\b|\bby\b|\bfor\b|\bthat\b|\bwhich\b|\bhow\b|\bcosting\b|\bat\b|\bworth\b|$))/i,
+  );
+  const item = m?.[1]?.trim();
+  return item && !/^(one|it|that|this|them|to)$/i.test(item) ? item : null;
+}
+
+function createGoal(ctx: InvestigateCtx, args: Record<string, unknown>): ToolResult {
+  const q = ctx.question ?? "";
+  const name = (str(args.name) ?? purchaseItem(q) ?? "New goal").slice(0, 40);
+  const stated = statedAmounts(q);
+  const proposed = num(args.target_amount_rupees);
+  // the price must be one the user wrote; a model's own estimate is refused
+  const price = proposed != null ? stated.find((x) => Math.abs(x - proposed) <= Math.max(1, x * 0.005)) : stated.length === 1 ? stated[0] : undefined;
+  if (price == null) {
+    return {
+      tool: "create_goal",
+      args,
+      finding: `No price for ${name} in your question, so no goal was created: RIPPLE never guesses a price.`,
+      ids: [],
+      data: { error: "the user did not state a price; do not estimate one, finish and ask for it", stated_amounts: stated },
+      needsInput: `What does ${name} cost? Tell me the price (for example "${name} costs ₹80,000") and I'll test it against your surplus.`,
+      error: true,
+    };
+  }
+  const months = num(args.months) ?? statedMonths(q);
+  const argDate = str(args.target_date);
+  const start = ym(ctx.today);
+  const target = argDate && /^\d{4}-\d{2}-\d{2}$/.test(argDate) && argDate > ctx.today ? ym(argDate) : addMonths(start, Math.max(1, Math.round(months ?? 12)));
+  const goal: Goal = {
+    id: `goal_inv_${name.toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 30)}`,
+    name,
+    target_amount: Math.round(price * 100),
+    target_date: `${target}-${String(daysInMonth(target)).padStart(2, "0")}`,
+    priority: 1,
+    allocated_so_far: 0,
+  };
+  // feasibility: funded first, ahead of the existing goals
+  const goals = withGoal(ctx.goals, goal);
+  const before = mainProjection(ctx);
+  const after = project(ctx.baseline, ctx.mainAssumptions, goals, ctx.profile.current_balance, ctx.today, 24);
+  const res = after.goals.find((g) => g.goal.id === goal.id)!;
+  const n = Math.max(1, monthsBetween(start, target));
+  const need = Math.ceil(goal.target_amount / n);
+  const surplus = after.plan.surplus;
+  const verdict = surplus >= need ? "your surplus covers it" : `short by ${formatINR(need - surplus)}/month`;
+  const moved = before.goals
+    .map((g) => ({ name: g.goal.name, b: g.projected, a: after.goals.find((x) => x.goal.id === g.goal.id)?.projected ?? null }))
+    .filter((g) => g.b !== g.a);
+  return {
+    tool: "create_goal",
+    args: { ...args, name },
+    finding: `Drafted goal ${name}: ${formatINR(goal.target_amount)} by ${monthLabelLong(target)} needs ${formatINR(need)}/month for ${n} month${n === 1 ? "" : "s"} against a ${formatINR(surplus)} surplus, ${verdict}; funded first it lands ${res.projected ? monthLabelLong(res.projected) : "beyond six years"}${moved.length ? ` and moves ${moved.map((g) => `${g.name} ${goalMonth(g.b)} → ${goalMonth(g.a)}`).join(", ")}` : ""}.`,
+    ids: ctx.baseline.incomeIds,
+    data: {
+      goal_id: goal.id,
+      target: formatINR(goal.target_amount),
+      by: monthLabelLong(target),
+      needed_per_month: formatINR(need),
+      surplus_per_month: formatINR(surplus),
+      gap_per_month: formatINR(Math.max(0, need - surplus)),
+      lands_if_funded_first: res.projected ? monthLabelLong(res.projected) : "not within six years",
+      on_time: res.onTrack,
+      other_goals_moved: moved.map((g) => ({ name: g.name, before: goalMonth(g.b), after: goalMonth(g.a) })),
+    },
+    goal,
+  };
+}
+
+/** A drafted goal goes first; existing goals keep their order behind it. */
+export function withGoal(goals: Goal[], goal: Goal): Goal[] {
+  return [goal, ...goals.filter((g) => g.id !== goal.id).map((g) => ({ ...g, priority: g.priority + 1 }))];
+}
+
 
 /** Dispatch one tool call. Never throws: a bad call becomes an error step the model can read. */
 export function runTool(ctx: InvestigateCtx, tool: string, args: Record<string, unknown> = {}): ToolResult {
@@ -275,6 +392,8 @@ export function runTool(ctx: InvestigateCtx, tool: string, args: Record<string, 
       case "run_projection":
       case "create_scenario":
         return projectionTool(ctx, tool as "run_projection" | "create_scenario", args);
+      case "create_goal":
+        return createGoal(ctx, args);
     }
   } catch (e) {
     return { tool: tool as ToolName, args, finding: `Tool failed: ${(e as Error).message}`, ids: [], data: { error: "tool failed" }, error: true };
@@ -295,30 +414,22 @@ export interface PlannerInput {
   mustConclude: boolean;
 }
 
+/**
+ * The one action the chain proposes. It always comes from a step in this chain (`step`, 1-based) and never from
+ * the pre-existing advice list. `goal` is set when the chain drafted a new goal; approving creates it too.
+ */
 export type Proposal =
-  | { kind: "scenario"; draft: ScenarioDraft; ids: string[] }
-  | { kind: "advice"; advice: Advice; evidence: string[]; label: string; monthly_saving: number };
+  | { kind: "scenario"; draft: ScenarioDraft; ids: string[]; step: number; goal: Goal | null }
+  | { kind: "goal"; goal: Goal; ids: string[]; step: number; finding: string };
 
 export interface Investigation {
   steps: ToolResult[];
   explanation: string;
   proposal: Proposal | null;
+  /** something only the user can answer (an unstated price); shown instead of a proposal */
+  ask: string | null;
   /** true when the planner hit the cap and was forced to conclude */
   capped: boolean;
-}
-
-/** The fallback proposal when the model offers none: the top fresh savings opportunity our engine priced, as advice. */
-export function fallbackProposal(ctx: InvestigateCtx): Proposal | null {
-  const o = freshOpportunities(findOpportunities(ctx.txns, ctx.recurring, ctx.today), ctx.advice)[0];
-  if (!o) return null;
-  const text = `${o.action}. This saves about ${formatINR(o.monthly_saving)} a month (found by the investigation agent).`;
-  return {
-    kind: "advice",
-    advice: { id: adviceId(o), date_given: ctx.today, text, projected_monthly_saving: o.monthly_saving, accepted: false, acted_on_date: null },
-    evidence: o.evidence_ids,
-    label: o.action,
-    monthly_saving: o.monthly_saving,
-  };
 }
 
 /** Words only: any sentence carrying a digit or rupee sign is dropped, so the model never states a figure. */
@@ -332,29 +443,71 @@ export function cleanExplanation(text: string | null | undefined): string | null
   return out.length >= 12 ? out.slice(0, 600) : null;
 }
 
+const improves = (d: ScenarioDraft) =>
+  d.surplus_after > d.surplus_before || d.goals.some((g) => (g.after && (!g.before || g.after < g.before)) || false);
+
+/** Which step touched what an assumption changes (its category or recurring payment), so a model proposal can cite it. */
+function stepTouching(steps: ToolResult[], a: Assumption): number {
+  const i = steps.findIndex((s) => {
+    const blob = JSON.stringify({ args: s.args, data: s.data });
+    if ("category" in a && (s.args.category === a.category || blob.includes(`"category":"${a.category}"`))) return true;
+    if (a.kind === "remove_recurring" && a.recurring_id && blob.includes(a.recurring_id)) return true;
+    return false;
+  });
+  return i;
+}
+
+/**
+ * Derive the proposal from this chain only. Order: the model's concluding proposal if a step touched what it
+ * changes; else the last scenario the chain drafted or projected that helps; else a goal it drafted. Nothing
+ * actionable → null, and the explanation says so.
+ */
+export function proposalFromChain(ctx: InvestigateCtx, steps: ToolResult[], modelProposal: { name: string; assumptions: RawAssumption[] } | null): Proposal | null {
+  const goalStep = steps.map((s, i) => (s.goal ? i : -1)).filter((i) => i >= 0).pop() ?? -1;
+  const goal = goalStep >= 0 ? steps[goalStep].goal! : null;
+  const live = goal ? { ...ctx, goals: withGoal(ctx.goals, goal) } : ctx;
+
+  if (modelProposal) {
+    const d = draftScenario(live, modelProposal.name, modelProposal.assumptions);
+    if (d && improves(d)) {
+      const cited = d.assumptions.map((a) => stepTouching(steps, a)).filter((i) => i >= 0);
+      if (cited.length) return { kind: "scenario", draft: d, ids: draftIds(live, d), step: Math.max(...cited) + 1, goal };
+    }
+  }
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const d = steps[i].draft;
+    if (d && improves(d)) return { kind: "scenario", draft: d, ids: steps[i].ids, step: i + 1, goal };
+  }
+  if (goal) return { kind: "goal", goal, ids: steps[goalStep].ids, step: goalStep + 1, finding: steps[goalStep].finding };
+  return null;
+}
+
 /** Deterministic planner for when the model is unavailable: a fixed, question-aware chain over the same tools. */
 export function fallbackPlanner(ctx: InvestigateCtx) {
-  return async ({ steps, mustConclude }: PlannerInput): Promise<PlannerStep> => {
+  return async ({ question, steps, mustConclude }: PlannerInput): Promise<PlannerStep> => {
     const done = new Set(steps.map((s) => s.tool));
-    if (!mustConclude) {
-      if (!done.has("get_goals")) return { type: "call", tool: "get_goals", args: {} };
-      if (!done.has("get_profile")) return { type: "call", tool: "get_profile", args: {} };
-      if (!done.has("get_recurring")) return { type: "call", tool: "get_recurring", args: { status: "new" } };
-      if (!done.has("get_category_trend")) {
-        const top = Object.entries(ctx.baseline.variableByCategory).sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))[0]?.[0] ?? "Dining";
-        return { type: "call", tool: "get_category_trend", args: { category: top, months: 6 } };
-      }
+    const top = Object.entries(ctx.baseline.variableByCategory).sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))[0]?.[0] ?? "Dining";
+    if (mustConclude) return { type: "conclude", explanation: null, proposal: null };
+    if (isPurchaseIntent(question)) {
+      // create the goal, test it against surplus, then model what closes the gap
+      if (!done.has("create_goal")) return { type: "call", tool: "create_goal", args: { name: purchaseItem(question) ?? "New goal" } };
+      if (steps.some((s) => s.needsInput)) return { type: "conclude", explanation: null, proposal: null };
+      if (!done.has("get_category_trend")) return { type: "call", tool: "get_category_trend", args: { category: top, months: 6 } };
+      if (!done.has("run_projection")) return { type: "call", tool: "run_projection", args: { assumptions: [{ kind: "category_pct", category: top, pct: -25 }] } };
+      return { type: "conclude", explanation: null, proposal: null };
     }
+    if (!done.has("get_goals")) return { type: "call", tool: "get_goals", args: {} };
+    if (!done.has("get_profile")) return { type: "call", tool: "get_profile", args: {} };
+    if (!done.has("get_category_trend")) return { type: "call", tool: "get_category_trend", args: { category: top, months: 6 } };
+    if (!done.has("run_projection")) return { type: "call", tool: "run_projection", args: { assumptions: [{ kind: "category_pct", category: top, pct: -20 }] } };
     return { type: "conclude", explanation: null, proposal: null };
   };
 }
 
-const TEMPLATE_EXPLANATION = "Here is what the chain found, step by step. The proposed action below is priced by RIPPLE's own arithmetic.";
-
 /**
  * Run the plan → call → observe loop. The planner (model or fallback) chooses; runTool computes.
  * At most MAX_TOOL_CALLS tool calls; after that the planner is told to conclude, and if it still asks
- * for a tool the chain concludes anyway with what it has.
+ * for a tool the chain concludes anyway with what it has. A goal drafted mid-chain is part of every later step.
  */
 export async function runInvestigation(
   ctx: InvestigateCtx,
@@ -363,6 +516,7 @@ export async function runInvestigation(
   onStep?: (r: ToolResult) => void,
 ): Promise<Investigation> {
   const steps: ToolResult[] = [];
+  let live: InvestigateCtx = { ...ctx, question };
   let conclusion: Extract<PlannerStep, { type: "conclude" }> | null = null;
   let capped = false;
   while (!conclusion) {
@@ -378,18 +532,23 @@ export async function runInvestigation(
       capped = true;
       conclusion = { type: "conclude", explanation: null, proposal: null };
     } else {
-      const r = runTool(ctx, next.tool, next.args ?? {});
+      const r = runTool(live, next.tool, next.args ?? {});
+      if (r.goal) live = { ...live, goals: withGoal(live.goals, r.goal) };
       steps.push(r);
       onStep?.(r);
     }
   }
   if (steps.length >= MAX_TOOL_CALLS) capped = true;
 
-  let proposal: Proposal | null = null;
-  const fromModel = conclusion.proposal ? draftScenario(ctx, conclusion.proposal.name, conclusion.proposal.assumptions) : null;
-  const drafted = fromModel ?? [...steps].reverse().find((s) => s.draft)?.draft ?? null;
-  if (drafted && drafted.surplus_after !== drafted.surplus_before) proposal = { kind: "scenario", draft: drafted, ids: draftIds(ctx, drafted) };
-  else proposal = fallbackProposal(ctx);
-
-  return { steps, explanation: cleanExplanation(conclusion.explanation) ?? TEMPLATE_EXPLANATION, proposal, capped };
+  const pending = steps.find((s) => s.needsInput);
+  if (pending && !steps.some((s) => s.goal)) {
+    return { steps, explanation: pending.needsInput!, proposal: null, ask: pending.needsInput!, capped };
+  }
+  const proposal = proposalFromChain(ctx, steps, conclusion.proposal);
+  const explanation =
+    cleanExplanation(conclusion.explanation) ??
+    (proposal
+      ? `The proposed action comes from step ${proposal.step} of the chain above; every figure in it is RIPPLE's own arithmetic.`
+      : "The chain didn't find a change worth proposing. Each step above shows what it checked.");
+  return { steps, explanation, proposal, ask: null, capped };
 }

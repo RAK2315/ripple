@@ -4,6 +4,7 @@ import { z } from "zod";
 import { CATEGORIES } from "../../../contract/types";
 import { hasKey, MODELS } from "./model";
 import { mask } from "./mask";
+import { recordCall } from "./meta";
 
 /**
  * Investigation agent, model side. One planning step per call: the model sees the question and the (masked)
@@ -61,6 +62,16 @@ export const INVESTIGATE_TOOLS = {
     description: "Draft a named scenario from assumptions for the user to approve. It is NOT applied until the user approves.",
     inputSchema: z.object({ name: z.string().describe("2-5 words"), assumptions: z.array(rawAssumption) }),
   }),
+  create_goal: tool({
+    description:
+      "Draft a new savings goal for something the user wants to buy, and test it against their surplus (funded first). target_amount_rupees must be the price the USER stated in the question; if they gave no price, do not estimate one: call finish and ask for it.",
+    inputSchema: z.object({
+      name: z.string().describe("the item, e.g. iPhone 18"),
+      target_amount_rupees: z.number().nullable().optional().describe("only the price the user wrote"),
+      target_date: z.string().nullable().optional().describe("YYYY-MM-DD"),
+      months: z.number().nullable().optional().describe("months from now, if the user said 'in N months'"),
+    }),
+  }),
   finish: tool({
     description:
       "Conclude the investigation. explanation: two or three sentences, words only, NO digits, amounts, percentages or dates (the user already sees every figure). proposal: the one concrete action, as scenario assumptions, or null.",
@@ -72,7 +83,8 @@ export const INVESTIGATE_TOOLS = {
 };
 
 export const INVESTIGATE_SYSTEM = `You are RIPPLE's investigation agent for an Indian user's personal finances. You answer a question by calling tools that run the user's own deterministic money engine. Plan a short chain: start broad (goals, profile), then narrow to the cause (trends, recurring payments, transactions), then test a fix with run_projection or create_scenario. Call exactly one tool per turn. You have at most 5 tool calls; finish as soon as you can explain the cause.
-When you finish, propose ONE concrete action as scenario assumptions (for example cut a growing category by a percent, or remove a recurring payment by its recurring_id). Only use categories, recurring_ids and goal_ids that appear in tool results. Never invent amounts: prefer percent cuts or removing a payment.
+If the user wants to buy something that is not one of their goals ("I want an iPhone, how do I save for it in four months"), first call create_goal with the price they stated, then test feasibility against surplus (its result shows the monthly gap), then run_projection or create_scenario for a change that closes the gap. If they did not state a price, call create_goal without one; RIPPLE will ask them. Never estimate a price.
+When you finish, propose ONE concrete action that follows from a step you ran (a change you projected, or a category or payment a step showed). Never propose something no step touched. Express it as scenario assumptions (for example cut a growing category by a percent, or remove a recurring payment by its recurring_id). Only use categories, recurring_ids and goal_ids that appear in tool results. Never invent amounts: prefer percent cuts or removing a payment.
 Rules: never recommend specific funds, stocks or insurance. In the finish explanation write words only, no digits, amounts, percentages or dates: the user already sees every figure next to each step.`;
 
 export interface InvestigateRequest {
@@ -127,7 +139,10 @@ export type PlanResult = { tool: string; args: Record<string, unknown>; model: k
 
 /** Tries the smart model, then the fast one (separate free-tier quota), then gives up so the client's fixed chain takes over. */
 export async function planStep(opts: { system: string; prompt: string; mustConclude: boolean; timeoutMs?: number }): Promise<PlanResult> {
-  if (!hasKey()) return null;
+  if (!hasKey()) {
+    recordCall("failed");
+    return null;
+  }
   for (const model of ["smart", "fast"] as const) {
     try {
       const res = await generateText({
@@ -142,10 +157,14 @@ export async function planStep(opts: { system: string; prompt: string; mustConcl
         maxRetries: model === "smart" ? 1 : 2,
       });
       const call = res.toolCalls[0];
-      if (call) return { tool: call.toolName, args: (call.input ?? {}) as Record<string, unknown>, model };
+      if (call) {
+        recordCall(model === "smart" ? "ok" : "fallback");
+        return { tool: call.toolName, args: (call.input ?? {}) as Record<string, unknown>, model };
+      }
     } catch (e) {
       console.error(`[ai] investigate step failed (${model}):`, (e as Error).message.slice(0, 200));
     }
   }
+  recordCall("failed");
   return null;
 }

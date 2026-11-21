@@ -28,6 +28,9 @@ interface Summary {
   path?: string;
 }
 
+/** Raw file size accepted for PDF / screenshot upload (base64 + JSON must stay under the 4.5 MB function body limit). */
+const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
+
 export function ImportScreen() {
   const [tab, setTab] = useState<Tab>("sms");
   const [text, setText] = useState("");
@@ -77,6 +80,15 @@ export function ImportScreen() {
         setBusy("Parsing CSV…");
         await finish(await ingestCsv(await file.text(), file.name), file.name);
       });
+    }
+    // uploads travel base64 in a JSON body; the hosting limit is 4.5 MB, so anything over ~3 MB raw is refused here, clearly
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setError(
+        `${file.name} is ${(file.size / 1024 / 1024).toFixed(1)} MB; the upload limit is ${MAX_UPLOAD_BYTES / 1024 / 1024} MB. ${
+          tab === "pdf" ? "Export a shorter date range, or upload the CSV/Excel statement instead." : "Crop the screenshot to the transaction list, or paste the bank SMS instead."
+        }`,
+      );
+      return;
     }
     return run(async () => {
       setBusy(tab === "pdf" ? "Reading PDF…" : "Reading screenshot with the vision model…");

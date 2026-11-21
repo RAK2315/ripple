@@ -1,3 +1,4 @@
+import { aiRoute } from "@/lib/ai/meta";
 import { z } from "zod";
 import { mask } from "@/lib/ai/mask";
 import { structured } from "@/lib/ai/model";
@@ -45,7 +46,7 @@ function evidenceOf(c: Candidate): string {
   return out ?? c.label;
 }
 
-export async function POST(req: Request) {
+export const POST = aiRoute(async function POST(req: Request) {
   const { candidates } = (await req.json()) as { candidates: Candidate[] };
   const prompt = candidates
     .map((c) => `key=${c.key} | kind=${c.kind} | action: ${mask(c.action)} | evidence: ${mask(evidenceOf(c))} | saving: ${c.facts.saving}`)
@@ -74,4 +75,4 @@ export async function POST(req: Request) {
     if (!chosen.some((x) => x.key === c.key)) chosen.push({ key: c.key, text: compose(c), source: "template" });
   }
   return Response.json({ ok: true, data: chosen, usedModel: !!res, masked: prompt });
-}
+});

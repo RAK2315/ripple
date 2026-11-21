@@ -4,7 +4,8 @@ import { persist } from "zustand/middleware";
 import fixture from "../../contract/fixture.json";
 import type { Advice, AiPayloadLog, Category, FixedCost, Goal, LlmCategory, Profile, RefusalLog, Rule, Scenario, Transaction } from "./types";
 import { DEMO_GOALS, DEMO_PROFILE, MAIN_SCENARIO } from "./seed";
-import { STORE_KEY } from "./config";
+import { STORE_KEY, STORE_VERSION } from "./config";
+import { storageProblem } from "./storage-health";
 import { normalizeMerchant } from "./engine/merchants";
 
 /** Source data only. Everything derived is computed in engine/ via useDerived(). */
@@ -133,6 +134,45 @@ export const useStore = create<State & Actions>()(
         set((s) => ({ aiLog: [{ id: crypto.randomUUID(), at: new Date().toISOString(), route, masked_payload }, ...s.aiLog].slice(0, 30) })),
       setRecurringNote: (id, note) => set((s) => ({ recurringNotes: { ...s.recurringNotes, [id]: note } })),
     }),
-    { name: STORE_KEY, version: 1 },
+    {
+      name: STORE_KEY,
+      // v2: bumped 21 Nov 2026 (investigation agent + privacy tokens). Any other version is from an earlier deploy:
+      // cleared on load rather than trusted, so a judge's stale browser can't crash the demo.
+      version: STORE_VERSION,
+      migrate: () => {
+        storageProblem("cleared-old");
+        return {} as State & Actions;
+      },
+      merge: (persisted, current) => {
+        if (persisted == null) return current;
+        if (!isValidState(persisted)) {
+          storageProblem("invalid");
+          return current;
+        }
+        return { ...current, ...(persisted as Partial<State>) };
+      },
+      onRehydrateStorage: () => (_state, error) => {
+        if (error) storageProblem("corrupt");
+      },
+    },
   ),
 );
+
+/** Shape check on saved state: anything that would crash a screen is rejected, not rendered. */
+export function isValidState(v: unknown): boolean {
+  if (!v || typeof v !== "object") return false;
+  const s = v as Record<string, unknown>;
+  const arr = (k: string) => s[k] === undefined || Array.isArray(s[k]);
+  const obj = (k: string) => s[k] === undefined || (!!s[k] && typeof s[k] === "object" && !Array.isArray(s[k]));
+  if (!["transactions", "rules", "goals", "scenarios", "advice", "refusals", "aiLog", "fixedCosts"].every(arr)) return false;
+  if (!["llmCache", "userOverrides", "profile", "adviceEvidence", "markedUnused", "nudgeAcks", "recurringNotes"].every(obj)) return false;
+  const txOk = ((s.transactions as unknown[]) ?? []).every((t) => {
+    const x = t as Record<string, unknown>;
+    return !!x && typeof x.id === "string" && typeof x.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(x.date) && Number.isFinite(x.amount) && typeof x.raw_description === "string";
+  });
+  const scOk = ((s.scenarios as unknown[]) ?? []).every((x) => !!x && typeof (x as Scenario).id === "string" && Array.isArray((x as Scenario).assumptions));
+  const goalOk = ((s.goals as unknown[]) ?? []).every((x) => !!x && typeof (x as Goal).id === "string" && Number.isFinite((x as Goal).target_amount) && typeof (x as Goal).target_date === "string");
+  const p = s.profile as Profile | undefined;
+  const profileOk = !p || (Number.isFinite(p.current_balance) && (p.monthly_income === null || Number.isFinite(p.monthly_income)));
+  return txOk && scOk && goalOk && profileOk;
+}

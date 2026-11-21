@@ -1,3 +1,4 @@
+import { aiRoute } from "@/lib/ai/meta";
 import { z } from "zod";
 import { mask } from "@/lib/ai/mask";
 import { structured } from "@/lib/ai/model";
@@ -21,7 +22,7 @@ const schema = z.object({
 const SYSTEM = `You extract transactions from Indian bank SMS alerts that matched none of our regex patterns. For each numbered message return: is_transaction (false for OTPs, offers, reminders, failed/declined); date as YYYY-MM-DD (Indian dates are day-first; assume year 2026 if missing); amount_rupees exactly as written in the message (never compute or guess); direction; merchant/payee as written; account_tail digits. [NAME], [PHONE] and XX1234 are privacy masks; keep them as-is.`;
 
 /** Extraction, not calculation: the model copies the amount the SMS states. We convert to paise. */
-export async function POST(req: Request) {
+export const POST = aiRoute(async function POST(req: Request) {
   const { messages } = (await req.json()) as { messages: string[] };
   const masked = messages.map((m, i) => `${i}. ${mask(m).replace(/\n/g, " ")}`).join("\n");
   const res = await structured({ model: "fast", system: SYSTEM, prompt: masked, schema });
@@ -38,4 +39,4 @@ export async function POST(req: Request) {
     };
   });
   return Response.json({ ok: true, data, usedModel: !!res, masked });
-}
+});

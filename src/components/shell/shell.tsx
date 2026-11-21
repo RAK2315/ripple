@@ -9,6 +9,9 @@ import { AiPanel } from "./ai-panel";
 import { CoachDrawer } from "@/components/coach/coach-drawer";
 import { InvestigateDrawer, useInvestigate } from "@/components/investigate/investigate-drawer";
 import { ThemeToggle } from "./theme-toggle";
+import { ErrorBoundary, RecoveryScreen } from "./recovery";
+import { AiStatusPill, ClearedNotice, IncomeBanner } from "./status-strip";
+import { useStorageHealth } from "@/lib/storage-health";
 import { Mark } from "./mark";
 import { useEffect } from "react";
 import { categorizeUnmatched } from "@/lib/actions";
@@ -31,6 +34,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const toast = useUi((s) => s.toast);
   const setAiPanel = useUi((s) => s.setAiPanel);
   const aiCount = useStore((s) => s.aiLog.length);
+  const storage = useStorageHealth((s) => s.problem);
+  const broken = storage === "corrupt" || storage === "invalid";
   // ?demo=1 loads the demo profile on a fresh browser (used for screenshots and the reset path)
   useEffect(() => {
     if (!hydrated) return;
@@ -102,20 +107,42 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <br />
             <span className="num text-xs">{aiCount}</span> masked payload{aiCount === 1 ? "" : "s"} sent
           </button>
+          <AiStatusPill />
           <ThemeToggle />
         </div>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <main className="mx-auto w-full max-w-6xl flex-1 px-8 py-8">{hydrated ? children : <PageSkeleton />}</main>
+        <main className="mx-auto w-full max-w-6xl flex-1 px-8 py-8">
+          {broken ? (
+            <RecoveryScreen
+              title="Your saved RIPPLE data couldn't be read"
+              detail="It was probably saved by an earlier version of the app, or got corrupted. Resetting clears it and reloads the demo profile; nothing leaves your browser."
+            />
+          ) : hydrated ? (
+            <ErrorBoundary key={path}>
+              <ClearedNotice />
+              <ErrorBoundary compact>
+                <IncomeBanner />
+              </ErrorBoundary>
+              {children}
+            </ErrorBoundary>
+          ) : (
+            <PageSkeleton />
+          )}
+        </main>
         <footer className="no-print border-t border-line px-8 py-3 text-xs text-faint">
           RIPPLE educates and models scenarios. It does not recommend specific securities, stocks, mutual funds or insurance products. Every rupee figure is
           computed by code, never by a language model.
         </footer>
       </div>
-      {hydrated && <InvestigateDrawer />}
-      {hydrated && <ProvenanceDrawer />}
-      {hydrated && <AiPanel />}
-      {hydrated && <CoachDrawer />}
+      {hydrated && !broken && (
+        <ErrorBoundary compact>
+          <InvestigateDrawer />
+          <ProvenanceDrawer />
+          <AiPanel />
+          <CoachDrawer />
+        </ErrorBoundary>
+      )}
       {toast && (
         <div
           role="status"

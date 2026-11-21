@@ -1,3 +1,4 @@
+import { aiRoute } from "@/lib/ai/meta";
 import { z } from "zod";
 import { mask } from "@/lib/ai/mask";
 import { structured } from "@/lib/ai/model";
@@ -23,7 +24,7 @@ const template = (it: Item) =>
     : `${it.merchant} now charges less than before; a downgrade or discount took effect.`;
 
 /** The model explains in words only. Any line containing a digit is rejected so no figure can come from the model. */
-export async function POST(req: Request) {
+export const POST = aiRoute(async function POST(req: Request) {
   const { items } = (await req.json()) as { items: Item[] };
   const prompt = items
     .map((it) => `${it.id}: ${mask(it.merchant)} (${it.category}) changed from ₹${it.before_rupees} to ₹${it.after_rupees} per charge on ${it.changed_on}`)
@@ -35,4 +36,4 @@ export async function POST(req: Request) {
     data[it.id] = line && !/\d/.test(line) && line.length < 220 ? { why: line, source: "model" } : { why: template(it), source: "template" };
   }
   return Response.json({ ok: true, data, usedModel: !!res, masked: prompt });
-}
+});

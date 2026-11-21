@@ -1,3 +1,4 @@
+import { aiRoute } from "@/lib/ai/meta";
 import { z } from "zod";
 import { mask } from "@/lib/ai/mask";
 import { structured } from "@/lib/ai/model";
@@ -23,7 +24,7 @@ const ANSWER_FALLBACK = (facts: Record<string, string>) =>
   `Here is what your numbers say: your monthly surplus is ${facts.surplus}, and ${facts.goal_name} lands in ${facts.goal_projected} against a target of ${facts.goal_date}. Try a "what if" on the Scenarios screen to see how a change moves it.`;
 
 /** facts = figures computed client-side by the engine, already formatted. The model only places them. */
-export async function POST(req: Request) {
+export const POST = aiRoute(async function POST(req: Request) {
   const { question, facts } = (await req.json()) as { question: string; facts: Record<string, string> };
   const ruleRefused = isSecuritiesQuestion(question);
   const masked = mask(question);
@@ -38,4 +39,4 @@ export async function POST(req: Request) {
   const source = text ? "model" : "template";
   if (!text) text = refused ? CONCEPT_FALLBACK(facts) : ANSWER_FALLBACK(facts);
   return Response.json({ ok: true, data: { refused, text, source }, usedModel: !!res, masked: prompt });
-}
+});

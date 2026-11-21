@@ -56,6 +56,17 @@ export function FlowScreen() {
       <div className="grid grid-cols-[1.15fr_1fr_0.9fr] gap-4">
         <div className="card p-6">
           <div className="text-xs uppercase tracking-wide text-muted">Invisible salary</div>
+          {d.baseline.incomeSource === "none" && plan.income <= 0 ? (
+            <div className="mt-3 text-sm text-muted" data-testid="invisible-no-income">
+              <div className="figure-hero text-faint">—</div>
+              Needs your income: no regular salary in {d.baseline.historyMonths} month{d.baseline.historyMonths === 1 ? "" : "s"} of history.{" "}
+              <Link href="/goals" className="text-ink underline underline-offset-2">
+                Enter it on Goals &amp; Profile
+              </Link>
+              .
+            </div>
+          ) : (
+          <>
           <div className="mt-3 flex items-end gap-3">
             <button
               className="figure-hero"
@@ -70,6 +81,8 @@ export function FlowScreen() {
             <Money paise={plan.fixed} ids={fixedIds} title="Fixed costs + subscriptions" className="text-ink" /> of fixed costs and subscriptions every month,
             against <Money paise={plan.income} ids={d.baseline.incomeIds} title="Regular income" className="text-ink" /> income.
           </div>
+          </>
+          )}
         </div>
 
         <Link href="/ghost" className="card group block p-6 transition-colors hover:border-line-strong">

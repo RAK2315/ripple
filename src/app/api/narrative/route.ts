@@ -1,3 +1,4 @@
+import { aiRoute } from "@/lib/ai/meta";
 import { z } from "zod";
 import { structured } from "@/lib/ai/model";
 import { fillPlaceholders } from "@/lib/engine/coach";
@@ -16,7 +17,7 @@ function template(f: Record<string, string>): string[] {
   ];
 }
 
-export async function POST(req: Request) {
+export const POST = aiRoute(async function POST(req: Request) {
   const { facts } = (await req.json()) as { facts: Record<string, string> };
   const prompt = `Placeholders and what they mean:\n${Object.keys(facts)
     .map((k) => `{${k}}`)
@@ -30,4 +31,4 @@ export async function POST(req: Request) {
     usedModel: !!res,
     masked: prompt,
   });
-}
+});

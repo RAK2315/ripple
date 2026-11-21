@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { useStore } from "./store";
+import { useStorageHealth } from "./storage-health";
 import { APP_TODAY, PROJECTION_MONTHS } from "./config";
 import { categorizeAll } from "./engine/categorize";
 import { detectRecurring } from "./engine/recurring";
@@ -46,10 +47,12 @@ export function useDerived() {
 
 export function useHydrated(): boolean {
   const [h, setH] = useState(false);
+  // unreadable saved state never finishes hydrating: treat that as done so the recovery screen can show
+  const broken = useStorageHealth((x) => x.problem === "corrupt");
   useEffect(() => {
     const unsub = useStore.persist.onFinishHydration(() => setH(true));
     if (useStore.persist.hasHydrated()) setH(true);
     return unsub;
   }, []);
-  return h;
+  return h || broken;
 }

@@ -7,6 +7,9 @@ import { computeBaseline } from "../projection";
 import { DEMO_GOALS, DEMO_PROFILE } from "../../seed";
 import {
   cleanExplanation,
+  isPurchaseIntent,
+  statedAmounts,
+  statedMonths,
   fallbackPlanner,
   MAX_TOOL_CALLS,
   runInvestigation,
@@ -76,7 +79,6 @@ describe("investigation tools wrap the engine and return contract-shaped results
     const cut = { assumptions: [{ kind: "category_pct", category: "Dining", pct: -20 }] };
     const p = runTool(ctx, "run_projection", cut);
     contractShaped(p);
-    expect(p.draft).toBeUndefined();
     const c = runTool(ctx, "create_scenario", { name: "Cut dining", ...cut });
     contractShaped(c);
     expect(c.draft!.surplus_after).toBeGreaterThan(c.draft!.surplus_before);
@@ -136,7 +138,7 @@ describe("the chain", () => {
     expect(seen).toHaveLength(MAX_TOOL_CALLS);
     expect(out.capped).toBe(true);
     expect(calls).toBe(MAX_TOOL_CALLS + 1); // the sixth ask is told to conclude, and is overruled
-    expect(out.proposal).not.toBeNull();
+    expect(out.proposal).toBeNull(); // five reads found nothing to act on, and nothing unrelated is substituted
   });
 
   it("tells the planner to conclude at the cap and uses its proposal, priced by our engine", async () => {
@@ -145,7 +147,7 @@ describe("the chain", () => {
       flags.push(mustConclude);
       return mustConclude
         ? { type: "conclude", explanation: "Dining keeps growing.", proposal: { name: "Trim dining", assumptions: [{ kind: "category_pct", category: "Dining", pct: -25 }] } }
-        : { type: "call", tool: "get_goals", args: {} };
+        : { type: "call", tool: "get_category_trend", args: { category: "Dining" } };
     };
     const out = await runInvestigation(ctx, "bike?", planner);
     expect(flags).toEqual([false, false, false, false, false, true]);
@@ -161,9 +163,73 @@ describe("the chain", () => {
     expect(broken.explanation.length).toBeGreaterThan(0);
     const fb = await runInvestigation(ctx, "Why am I falling behind on the bike goal?", fallbackPlanner(ctx));
     expect(fb.steps.length).toBeLessThanOrEqual(MAX_TOOL_CALLS);
-    expect(fb.steps.map((s) => s.tool)).toEqual(["get_goals", "get_profile", "get_recurring", "get_category_trend"]);
-    expect(fb.proposal?.kind).toBe("advice");
-    if (fb.proposal?.kind === "advice") expect(fb.proposal.monthly_saving).toBeGreaterThan(0);
+    expect(fb.steps.map((s) => s.tool)).toEqual(["get_goals", "get_profile", "get_category_trend", "run_projection"]);
+    expect(fb.proposal?.kind).toBe("scenario");
+  });
+
+  it("a purchase-intent question creates the goal, tests it against surplus, then models what closes the gap", async () => {
+    const q = "I want an iPhone 18 for ₹1,40,000, how do I save for one in 4 months?";
+    const out = await runInvestigation(ctx, q, fallbackPlanner(ctx));
+    expect(out.steps[0].tool).toBe("create_goal");
+    const goal = out.steps[0].goal!;
+    expect(goal.name).toBe("iPhone 18");
+    expect(goal.target_amount).toBe(14000000);
+    expect(goal.target_date).toBe("2027-03-31");
+    expect(out.steps[0].data.needed_per_month).toBe("₹35,000");
+    expect(out.steps[0].finding).toMatch(/short by|covers it/);
+    // later steps run with the drafted goal in place
+    const proj = out.steps.find((s) => s.tool === "run_projection")!;
+    expect(proj.draft!.goals.map((g) => g.name)).toContain("iPhone 18");
+    expect(out.proposal).not.toBeNull();
+    expect(out.proposal!.kind === "scenario" ? out.proposal!.goal?.name : out.proposal!.goal.name).toBe("iPhone 18");
+  });
+
+  it("asks for the price instead of inventing one; a model's own price is refused", async () => {
+    const out = await runInvestigation(ctx, "I want an iPhone 18, how do I save for one in 4 months?", fallbackPlanner(ctx));
+    expect(out.steps.map((s) => s.tool)).toEqual(["create_goal"]);
+    expect(out.steps[0].goal).toBeUndefined();
+    expect(out.ask).toMatch(/What does iPhone 18 cost/);
+    expect(out.proposal).toBeNull();
+    const invented = runTool({ ...ctx, question: "I want an iPhone 18 in 4 months" }, "create_goal", { name: "iPhone 18", target_amount_rupees: 139900 });
+    expect(invented.goal).toBeUndefined();
+    expect(invented.needsInput).toBeTruthy();
+  });
+
+  it("the proposed action references a step from the chain that produced it, never the advice list", async () => {
+    for (const q of ["Why am I falling behind on the bike goal?", "What is eating into my surplus?"]) {
+      const out = await runInvestigation(ctx, q, fallbackPlanner(ctx));
+      const p = out.proposal!;
+      expect(p.step).toBeGreaterThanOrEqual(1);
+      const cited = out.steps[p.step - 1];
+      expect(["run_projection", "create_scenario", "create_goal"]).toContain(cited.tool);
+      if (p.kind === "scenario") expect(cited.draft).toEqual(p.draft);
+    }
+    // a model proposal about something no step touched is not used
+    const planner = async ({ steps }: { steps: ToolResult[] }): Promise<PlannerStep> =>
+      steps.length < 2
+        ? { type: "call", tool: steps.length ? "get_category_trend" : "get_goals", args: { category: "Shopping" } }
+        : { type: "conclude", explanation: "Shopping is up.", proposal: { name: "Trim travel", assumptions: [{ kind: "category_pct", category: "Travel", pct: -50 }] } };
+    const out = await runInvestigation(ctx, "why?", planner);
+    expect(out.proposal).toBeNull(); // nothing actionable found: no unrelated substitute
+    expect(out.explanation).toMatch(/Shopping is up|didn't find a change/);
+    const ok = async ({ steps }: { steps: ToolResult[] }): Promise<PlannerStep> =>
+      steps.length < 1
+        ? { type: "call", tool: "get_category_trend", args: { category: "Dining" } }
+        : { type: "conclude", explanation: null, proposal: { name: "Trim dining", assumptions: [{ kind: "category_pct", category: "Dining", pct: -30 }] } };
+    const good = await runInvestigation(ctx, "why?", ok);
+    expect(good.proposal?.kind).toBe("scenario");
+    expect(good.proposal?.step).toBe(1);
+  });
+
+  it("stated prices and durations are read by our code, model names are not prices", () => {
+    expect(statedAmounts("iPhone 18 for ₹1,40,000 in 4 months")).toEqual([140000]);
+    expect(statedAmounts("a bike worth 1.25 lakh")).toEqual([125000]);
+    expect(statedAmounts("PS5 at 55k")).toEqual([55000]);
+    expect(statedAmounts("I want an iPhone 18 in 4 months")).toEqual([]);
+    expect(statedMonths("in 4 months")).toBe(4);
+    expect(statedMonths("within a year")).toBe(12);
+    expect(isPurchaseIntent("how do I save for a PS5")).toBe(true);
+    expect(isPurchaseIntent("why is dining up")).toBe(false);
   });
 
   it("an empty dataset never crashes any tool", async () => {

@@ -1,6 +1,7 @@
 import { generateText, Output } from "ai";
 import { groq } from "@ai-sdk/groq";
 import type { z } from "zod";
+import { recordCall } from "./meta";
 
 // Groq free tier. gpt-oss models support json_schema structured outputs.
 export const MODELS = {
@@ -26,7 +27,10 @@ export async function structured<T>(opts: {
   images?: { data: string; mediaType: string }[];
   timeoutMs?: number;
 }): Promise<T | null> {
-  if (!hasKey()) return null;
+  if (!hasKey()) {
+    recordCall("failed");
+    return null;
+  }
   if (opts.images?.length && !hasVision()) return null;
   try {
     const { output } = await generateText({
@@ -39,9 +43,11 @@ export async function structured<T>(opts: {
       abortSignal: AbortSignal.timeout(opts.timeoutMs ?? 45000),
       maxRetries: 3,
     });
+    recordCall("ok");
     return output as T;
   } catch (e) {
     console.error("[ai] structured call failed:", (e as Error).message);
+    recordCall("failed");
     return null;
   }
 }

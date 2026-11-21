@@ -1,3 +1,4 @@
+import { aiRoute } from "@/lib/ai/meta";
 import { z } from "zod";
 import { CATEGORIES } from "../../../../contract/types";
 import { mask } from "@/lib/ai/mask";
@@ -25,7 +26,7 @@ interface Body {
   examples: string[];
 }
 
-export async function POST(req: Request) {
+export const POST = aiRoute(async function POST(req: Request) {
   const b = (await req.json()) as Body;
   const masked = [
     `Corrected transaction: ${mask(b.description)}`,
@@ -55,7 +56,7 @@ export async function POST(req: Request) {
       }
     : fallbackRule(b);
   return Response.json({ ok: true, data: rule, usedModel: !!valid, masked });
-}
+});
 
 /** Deterministic fallback: the merchant name if it appears in the description, else the longest run of meaningful tokens. */
 function fallbackRule(b: Body) {

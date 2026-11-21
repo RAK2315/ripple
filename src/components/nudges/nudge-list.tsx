@@ -49,9 +49,9 @@ export function NudgeList({ compact = false }: { compact?: boolean }) {
                     >
                       {ordinal(t.date)}
                     </button>
+                    {i === n.drivers.length - 1 && "."}
                   </span>
                 ))}
-                .
               </p>
               {n.goalName && n.goalFrom && (
                 <p className="mt-1 text-muted">

@@ -57,4 +57,15 @@ body {
   body {
     background: white;
   }
+  main {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+  .card {
+    break-inside: avoid;
+  }
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }

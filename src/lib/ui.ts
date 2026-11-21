@@ -6,6 +6,8 @@ interface UiState {
   provenance: { title: string; ids: string[]; note?: string } | null;
   toast: { text: string; tone?: "ok" | "warn" } | null;
   aiPanel: boolean;
+  coach: boolean;
+  setCoach: (open: boolean) => void;
   showProvenance: (title: string, ids: string[], note?: string) => void;
   closeProvenance: () => void;
   showToast: (text: string, tone?: "ok" | "warn") => void;
@@ -16,6 +18,8 @@ export const useUi = create<UiState>((set) => ({
   provenance: null,
   toast: null,
   aiPanel: false,
+  coach: false,
+  setCoach: (coach) => set({ coach }),
   showProvenance: (title, ids, note) => set({ provenance: { title, ids, note } }),
   closeProvenance: () => set({ provenance: null }),
   showToast: (text, tone = "ok") => {

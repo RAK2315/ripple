@@ -6,6 +6,7 @@ import { useStore } from "@/lib/store";
 import { useUi } from "@/lib/ui";
 import { ProvenanceDrawer } from "./provenance-drawer";
 import { AiPanel } from "./ai-panel";
+import { CoachDrawer } from "@/components/coach/coach-drawer";
 import { useEffect } from "react";
 import { categorizeUnmatched } from "@/lib/actions";
 
@@ -59,8 +60,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
         <button
+          onClick={() => useUi.getState().setCoach(true)}
+          className="mt-auto mb-2 rounded-lg bg-accent px-3 py-2.5 text-left text-sm font-medium text-white hover:opacity-90"
+        >
+          Ask RIPPLE
+        </button>
+        <button
           onClick={() => setAiPanel(true)}
-          className="mt-auto rounded-lg border border-line px-3 py-2 text-left text-xs text-muted hover:bg-paper"
+          className=" rounded-lg border border-line px-3 py-2 text-left text-xs text-muted hover:bg-paper"
         >
           <span className="font-medium text-ink">What the AI sees</span>
           <br />
@@ -76,6 +83,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       </div>
       {hydrated && <ProvenanceDrawer />}
       {hydrated && <AiPanel />}
+      {hydrated && <CoachDrawer />}
       {toast && (
         <div
           className={`fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl px-5 py-3 text-sm text-white shadow-lg ${toast.tone === "warn" ? "bg-warn" : "bg-ink"}`}

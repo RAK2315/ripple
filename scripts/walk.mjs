@@ -65,6 +65,22 @@ if (process.env.ONLY !== "core") {
   await shot("10-subscriptions");
   console.log("graveyard:", (await page.getByTestId("graveyard").innerText()).split(String.fromCharCode(10)).slice(0, 2).join(" "));
   console.log("changed:", (await page.getByTestId("changed-alert").first().innerText()).replace(/\s+/g, " "));
+  // B7: goals, monthly review narrative, coach refusal
+  await page.goto(`${base}/goals`);
+  await page.getByTestId("goal-row").first().waitFor();
+  await shot("11-goals");
+  await page.goto(`${base}/report`);
+  await page.getByTestId("narrative").waitFor();
+  await page.waitForFunction(() => !document.body.innerText.includes("Writing the narrative"), null, { timeout: 60000 });
+  await shot("12-report");
+  console.log("narrative:", (await page.getByTestId("narrative").innerText()).replace(/\s+/g, " ").slice(0, 400));
+  await page.getByRole("button", { name: "Ask RIPPLE" }).click();
+  await page.getByLabel("Ask the coach").fill("which mutual fund should I buy");
+  await page.getByRole("button", { name: "Ask", exact: true }).click();
+  await page.getByTestId("coach-turn").first().waitFor({ timeout: 60000 });
+  await page.waitForTimeout(500);
+  await shot("13-refusal");
+  console.log("coach:", (await page.getByTestId("coach-turn").first().innerText()).replace(/\s+/g, " "));
   // later blocks append here
 }
 console.log("errors:", errors.length ? errors.join("\n") : "none");

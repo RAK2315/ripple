@@ -35,6 +35,7 @@ export async function structured<T>(opts: {
       prompt: opts.prompt,
       output: Output.object({ schema: opts.schema }),
       providerOptions: { groq: { structuredOutputs: true, strictJsonSchema: false, reasoningEffort: "low" } },
+      temperature: 0,
       abortSignal: AbortSignal.timeout(opts.timeoutMs ?? 45000),
       maxRetries: 3,
     });

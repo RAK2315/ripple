@@ -39,7 +39,7 @@ Update after each block.
 - [x] B4 scenarios: NL → editable assumptions → run, branch tree with parents, diff vs any scenario, compare line on timeline
 - [x] B5 Ghost: regret number (6% savings rate, provenance = payments since advice), ghost line + gap, ghost goal dates, accept; rough demo at ../demo-recordings/rough-demo-b5.webm (`REC=<dir> node scripts/walk.mjs`)
 - [x] B6 /subscriptions: graveyard (yearly total, mark unused), changed/new alerts + /api/explain (digit-guarded, template fallback), shifts.ts + Re-plan, nudges (≥2 rows, ≥₹2k drift), goal-impact on review rows, nudges, recurring table, provenance drawer
-- [ ] B7 goals & profile, monthly review, coach guardrails
+- [x] B7 /goals editor (income override, balance, emergency fund, manual fixed costs, goals reorder/add/delete), /report (computed review + /api/narrative + print), "Ask RIPPLE" coach drawer: securities regex + model flag → refusal + concept + computed monthly amount, refusal log. Model text uses {placeholders} filled by our code; any digit → template
 - [ ] B8 privacy + PDF/UPI verification
 - [ ] B9 deploy (needs user: Vercel login)
 - [ ] B10 re-record + polish

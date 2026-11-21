@@ -6,41 +6,49 @@ Document only. Nothing below has been fixed. Hunted across the whole app at comm
 
 **Counts:** 6 demo-breaking · 33 wrong-data · 13 cosmetic · **52 total**
 
+**Status after phases 1–2 (21 Nov, 19:00 IST):** all 6 demo-breaking fixed; wrong-data: 2 fixed (W29, W32), 3 partly fixed (W10, W21, W31), 28 open; cosmetic: 2 fixed (C5, C11), 11 open. Each fixed entry names its commit.
+
 ---
 
 ## Demo-breaking
 
 ### D1. Groq daily token quota is exhausted, and the PDF path has no deterministic fallback  [ran]
+- **Status: FIXED** (phase 2, ce4fd84: text-layer PDFs fall back to RIPPLE's own parser (55/55 rows on the demo statement, test), chunk calls time out at 30 s; walk completes the PDF step on the floor. The quota itself is operational: no FALLBACK_MODEL_KEY is configured)
 - **Where:** `src/app/api/vision/route.ts:44-50` (text-layer PDF calls `structured({ model: "smart" })` per chunk, no non-model parse); `src/lib/ai/model.ts` (one key, `gpt-oss-120b` for every "smart" route). Same key in Vercel production.
 - **Repro:** at 18:00 IST a direct call returned `429 Rate limit reached for model openai/gpt-oss-120b ... tokens per day (TPD): Limit 200000, Used 198989`. Then `node scripts/walk.mjs <dir>` → every headline number still correct, but the walk times out at the PDF step: `locator.waitFor: Timeout 120000ms exceeded ... waiting for getByText('Added')`.
 - **What happens:** every smart route silently degrades to templates (coach, advice wording, scenario naming, narrative, explain, rule proposals). Those have fallbacks. The text-layer PDF import does not: the spinner "Reading PDF…" sits for up to ~3 minutes (90 s timeout × retries per chunk, `maxDuration = 180`) and then shows "The model could not read this file". The investigation agent's own testing this session (each run is ~6 calls of 2–4k tokens) contributed to burning the quota; see W30.
 - **Should:** PDF text layer gets a deterministic row parser (date + amount + description regex on the extracted text, the same shape the CSV fallback uses), used when the model call fails; long model calls fail fast on a 429 instead of retrying into a multi-minute wait. Operationally: know the quota resets on a rolling 24 h window, and avoid burning it before recording.
 
 ### D2. Uploads over ~3.3 MB fail on the deployed site with a raw JSON parse error  [ran]
+- **Status: FIXED** (phase 1, bb83df1: files over 3 MB refused before upload with a clear message; callApi turns non-JSON responses (413) into a readable error)
 - **Where:** Vercel function body limit (4.5 MB) vs base64 upload in `src/components/import/import-screen.tsx:84-86`; `src/lib/api.ts:7-9` calls `res.json()` on a non-JSON body.
 - **Repro:** POST a 5.2 MB body to `https://ripple-psi-gold.vercel.app/api/vision` → `413 Request Entity Too Large / FUNCTION_PAYLOAD_TOO_LARGE`. In the UI: Import → UPI screenshot (or PDF) → choose a 3.5 MB phone screenshot.
 - **What happens:** the 413 body is plain text, `res.json()` throws, `callApi` returns `{ ok:false, error: "Unexpected token 'R', \"Request En\"... is not valid JSON" }`, and that string is shown to the user. The clean "needs a vision model, paste SMS/CSV instead" message never appears because the request never reaches the route. Phone screenshots and scanned statements are routinely this size. This also blocks feature 2 (vision) for real files.
 - **Should:** check `file.size` before encoding (or downscale images client-side) and show a clear "file too large, max N MB" message; `callApi` should handle non-JSON responses with a readable error.
 
 ### D3. Corrupted `ripple-v1` in localStorage leaves the app on a skeleton forever  [ran]
+- **Status: FIXED** (phase 1, bb83df1: unreadable saved state shows a recovery screen with "Reset and reload demo data"; verified in the browser)
 - **Where:** `src/lib/derived.ts:47-55` (`useHydrated` waits for `onFinishHydration`); `src/components/shell/shell.tsx` gates `<main>` on `hydrated`; `src/lib/store.ts:136` (persist, no `onRehydrateStorage` error handling).
 - **Repro:** on any page run `localStorage.setItem("ripple-v1", "{not json")`, reload.
 - **What happens:** the content area shows loading skeletons indefinitely, no console error, no message. Every route, including Import (where "Reset demo" lives), is gated the same way, so the user cannot recover without devtools.
 - **Should:** on a rehydration error, fall back to the empty state, show a notice, and offer reset.
 
 ### D4. No error boundary: one render exception blanks the whole app  [ran]
+- **Status: FIXED** (phase 1, bb83df1: error boundaries around every screen and drawer; wrong-shaped saved state is rejected on load (recovery screen); saved schema versioned (v2), older saves cleared with a notice)
 - **Where:** no `error.tsx` / React error boundary under `src/app/`; components assume store shape (e.g. `s.scenarios.map`).
 - **Repro:** load `/?demo=1`, then in devtools set `state.scenarios = null` in `ripple-v1` (simulates stale data from an older build) and reload; visit `/`, `/scenarios`, `/ghost`, `/goals`.
 - **What happens:** `TypeError: Cannot read properties of null (reading 'map')` on every route; the main area renders nothing. Any future unexpected value (a bad model-produced row, an old schema) has the same blast radius.
 - **Should:** a route-level error boundary with a "Reset demo data" action; validate persisted state shape on rehydrate.
 
 ### D5. A judge's own short statement produces income ₹0 and nonsense everywhere  [code]
+- **Status: FIXED** (phase 1, bb83df1: with no detectable salary every screen shows "Income not detected" with the months imported and a link to enter it; Flow's invisible salary shows a dash, the agent says not detected; verified with a one-month CSV)
 - **Where:** `src/lib/engine/projection.ts:35-36` (income = largest *recurring* credit); `src/lib/engine/recurring.ts:36-40` (recurring needs ≥3 occurrences at a monthly cadence, amounts within 5%).
 - **Repro:** Import → Reset demo → upload a CSV covering one or two months (or a salary that varies by more than 5% month to month, e.g. a bonus month).
 - **What happens:** no salary is detected, so income = ₹0 and fixed costs = ₹0 (nothing is "recurring" yet). Flow shows "Invisible salary 0%", surplus is negative, every goal reads "not reached", Monthly Review shows "999 mo late" (W20), and the investigation agent reports "Income ₹0/month". Nothing tells the user why or points to Goals → Monthly income.
 - **Should:** when no income is detected, say so on Flow ("we couldn't detect a salary: set it on Goals") instead of computing on ₹0; consider largest credit when history is short.
 
 ### D6. "What the AI sees" shows payee names in clear: recurring ids and merchant names reach models unmasked  [code]
+- **Status: FIXED** (phase 1, bb83df1: every model-bound body is tokenized in callApi (src/lib/ai/protect.ts), names in every derived form including ids (rec_ramesh_kulkarni → rec_name_1) and name parts in free text; test drives all model routes and asserts no demo name reaches a call or the panel)
 - **Where:** `src/app/api/scenario/route.ts` prompt line `Recurring payments (id: merchant, category): ${recurring.map(r => `${r.id}: ${r.merchant} (${r.category})`)}`, with no `mask()` at all; recurring ids are built from the payee name (`src/lib/engine/recurring.ts:67` → `rec_ramesh_kulkarni`) and are also sent by `/api/explain` (`${it.id}:`), `/api/advice` (`key=unused_rec_<name>`) and `/api/investigate` (`recurring_id` in tool data; my leaf-masking scrubs "Ramesh Kulkarni" but not `rec_ramesh_kulkarni`).
 - **Repro:** load the demo, Scenarios → type "what if rent goes up by 6000" → Run → open "What the AI sees" → the scenario payload lists `rec_ramesh_kulkarni: Ramesh Kulkarni (…)` and `rec_sunita_mehta: Sunita Mehta (…)`.
 - **What happens:** the privacy claim (rule 3: "every model call is masked first") is visibly false on the panel a judge is invited to open.
@@ -107,6 +115,7 @@ Document only. Nothing below has been fixed. Hunted across the whole app at comm
 - Should: count multiplicity (n copies in store vs n in batch), or dedup on a reference number when present.
 
 **W10. PDF/vision rows dropped silently; summary claims 0 unparsed**  [code]
+- **Status: PARTLY FIXED** (the deterministic PDF path reports unreadable rows as unparsed; rows the model path drops are still not reported)
 - Where: `src/app/api/vision/route.ts:67-68` (filters rows with a bad date or non-positive amount), `:49-51` (failed chunks only noted in `path`); `import-screen.tsx:87` hard-codes `unparsed: []`.
 - Repro: a PDF where one chunk times out, or the model returns a row with date `"14 Nov"`.
 - Happens: those rows vanish; the Import summary says nothing was left unparsed. Violates the contract's "never silently drop".
@@ -177,6 +186,7 @@ Document only. Nothing below has been fixed. Hunted across the whole app at comm
 - Should: "not reached at this surplus" (as the Goals screen already says).
 
 **W21. Invisible salary shows 0% when income is ₹0, and absurd percentages for tiny incomes**  [ran]
+- **Status: PARTLY FIXED** (₹0 income now shows the no-income state (D5); a tiny non-zero income still gives a huge percentage)
 - Where: `src/components/flow/flow-screen.tsx:39`.
 - Repro: income ₹1 → "3889300% of your income is spent before it arrives"; no salary detected (D5) → "0%".
 - Should: "income not detected" state instead of a number.
@@ -228,6 +238,7 @@ Document only. Nothing below has been fixed. Hunted across the whole app at comm
 ### Investigation agent (new today)
 
 **W29. A model proposal that doesn't change monthly surplus is thrown away**  [code]
+- **Status: FIXED** (bb83df1: proposals are derived from the chain and cite their step; a draft that moves any goal date counts; the advice-list substitute is gone)
 - Where: `src/lib/engine/investigate.ts` `runInvestigation`: a draft is only kept if `surplus_after !== surplus_before`.
 - Repro: ask "Can I get the laptop sooner?" and have the model propose a `goal_change` (move the date) or a dated `one_off`.
 - Happens: the proposal is replaced by the fallback advice (top fresh opportunity), which may be unrelated to the question.
@@ -242,6 +253,7 @@ Document only. Nothing below has been fixed. Hunted across the whole app at comm
 ### Privacy
 
 **W31. `mask()` misses common Indian narration formats**  [ran]
+- **Status: PARTLY FIXED** (bb83df1: names that appear anywhere in the user's own data are now tokenized in every payload, including inside NEFT/IMPS/UPI-dash narrations; spaced phone numbers and names never seen as a payee are still missed by mask())
 - Where: `src/lib/ai/mask.ts`.
 - Repro (input → output from a vitest probe):
   - `NEFT CR-HDFC0001234-SUNITA MEHTA-NOV RENT` → unchanged
@@ -257,6 +269,7 @@ Document only. Nothing below has been fixed. Hunted across the whole app at comm
 - Should: add the NEFT/IMPS/UPI-dash/P2M/BY TRANSFER shapes, spaced 10-digit numbers, and ≥4-word names.
 
 **W32. Free-text questions get pattern masking only**  [code]
+- **Status: FIXED** (bb83df1: known payee names and their parts are tokenized in every free-text field before any call)
 - Where: `/api/coach`, `/api/scenario`, `/api/investigate` all `mask()` the typed sentence.
 - Repro: ask the coach "why do I send Sunita so much?".
 - Happens: "Sunita" reaches the model (single names are never masked). The investigate route also scrubs names that appeared in its tool data; the others don't.
@@ -287,6 +300,7 @@ Document only. Nothing below has been fixed. Hunted across the whole app at comm
 `src/components/nudges/nudge-list.tsx` prints a goal-impact that rounds to 0 instead of hiding the clause.
 
 **C5. Investigation findings use "Jun 27" for June 2027**  [ran]
+- **Status: FIXED** (bb83df1)
 `src/lib/engine/investigate.ts` uses `monthLabel` ("Jun 27"), which reads as the date 27 June. Use `monthLabelLong` ("Jun 2027").
 
 **C6. Choosing the same file again does nothing**  [code]
@@ -305,6 +319,7 @@ Document only. Nothing below has been fixed. Hunted across the whole app at comm
 `fallback.ts:207-226`: the header is detected but every row is one cell; the reason shown should be "unsupported delimiter".
 
 **C11. A stale persisted `version` logs a console error on every load**  [ran]
+- **Status: FIXED** (bb83df1: a migrate step now clears older saves quietly with an on-screen notice)
 `store.ts` persist has `version: 1` and no `migrate`; a stored `version: 0` logs "State loaded from storage couldn't be migrated since no migrate function was provided" (data still loads). Breaks the "zero console errors" bar for returning visitors after any future version bump.
 
 **C12. "What the AI sees" keeps only 30 payloads, and one investigation logs 6**  [code]

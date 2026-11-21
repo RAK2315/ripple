@@ -8,7 +8,7 @@
   <a href="https://ripple-psi-gold.vercel.app"><img alt="Live demo" src="https://img.shields.io/badge/live%20demo-ripple--psi--gold.vercel.app-2F6B4F?style=flat-square"></a>
   <img alt="Next.js 16" src="https://img.shields.io/badge/Next.js-16-1C1B18?style=flat-square">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-4B4F8F?style=flat-square">
-  <img alt="Tests" src="https://img.shields.io/badge/engine%20tests-24%20passing-2F6B4F?style=flat-square">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-85%20passing-2F6B4F?style=flat-square">
   <img alt="Model" src="https://img.shields.io/badge/model-Groq%20gpt--oss-9A6B1F?style=flat-square">
   <img alt="License MIT" src="https://img.shields.io/badge/license-MIT-6B6760?style=flat-square">
 </p>
@@ -43,6 +43,10 @@ RIPPLE keeps a running model of your money that you can correct, branch and ques
 
 ## What makes it different
 
+**An investigation agent that drives the engine.** Ask "why am I falling behind on the bike goal?" or "I want an iPhone 18 for ₹1,40,000 in 4 months, how do I save for it?" under **Investigate**. The model plans a chain of up to five tool calls over RIPPLE's own deterministic engine (`query_transactions`, `get_recurring`, `get_goals`, `get_profile`, `get_category_trend`, `run_projection`, `create_scenario`, `create_goal`), and each step appears as it completes: the call, a one-line finding our code writes, and the rows it touched, clickable. It ends with one action you approve (a scenario, a new goal, or both), derived from a step in that chain and citing it. It never guesses a price: with none stated, it asks. The model chooses and explains; every figure is computed by the engine.
+
+**Plain-language bulk rules.** On Review, type "put all entries of Maheshwari Mart and Pintu Kumar as stationery". RIPPLE turns it into one rule per merchant, creates the Stationery category if it doesn't exist, and previews each rule with how many rows it matches, editable, before anything applies. Anything it can't match to your data is named, not guessed. These rules sit in the Rulebook beside the learned ones, marked with the instruction they came from.
+
 **A glass-box rulebook that learns from corrections.** Fix one transaction and the model proposes a general rule ("if the description contains BHAGWATI TIFFIN SERVICE, the category is Dining"). You see it in plain English with a live match count, edit it, confirm it, and it re-applies over your history: on the demo data, 14 past rows update at once. Every rule is listed in the Rulebook with its source transaction, and can be edited, disabled or deleted. Guesses the model makes about a merchant you have never confirmed are never applied silently: they wait in Review until you accept or fix one.
 
 **Scenario branching with a diff.** Type a "what if" sentence. The model only reads it into parameters (rent +₹6,000, dining −33.3%), shown as editable fields before anything runs. Scenarios have parents, so they build on each other; `main` cannot be deleted. The diff view compares any two: balance in 12 months, monthly surplus, each goal's landing month, and which goals miss their date.
@@ -73,19 +77,21 @@ The model (Groq, `openai/gpt-oss-120b` and `gpt-oss-20b`, through the Vercel AI 
 | Explain a subscription price change | `/api/explain` | one sentence of words |
 | Write the monthly review | `/api/narrative` | prose with `{placeholders}` |
 | Coach answers and refusals | `/api/coach` | prose with `{placeholders}`, plus an out-of-scope flag |
+| Investigation agent, one step at a time | `/api/investigate` | the next tool to call and its arguments, or a word-only conclusion; tools run in our engine |
+| Plain-language bulk rules | `/api/bulk-rules` | which merchants and which category; every merchant is checked against your data |
 
 Three fences keep it honest:
 
 - **Placeholders, not numbers.** Prose from the model refers to figures as `{surplus}`, `{goal_date}` and so on; our code fills them in. If the model writes a digit itself, the text is rejected and a template is used.
-- **Masked before every call.** Account and card numbers become `XX1234`, phone numbers `[PHONE]`, people's names `[NAME]`. The exact payloads are listed in the app under "What the AI sees".
-- **A fallback for every path.** No key, a timeout or bad JSON drops to a deterministic heuristic, flagged lower confidence. The demo never hangs on a model call.
+- **Masked before every call.** Every payload is tokenized at the single point where it is built: each person's name in your data becomes `[NAME_n]` in every form our code derives from it, including ids like `rec_ramesh_kulkarni`; account and card numbers become `XX1234`, phone numbers `[PHONE]`, UPI handles `[UPI-ID]`. A test drives every model route and fails if any demo name reaches a call. The exact payloads are listed in the app under "What the AI sees".
+- **A fallback for every path, and you can see it.** No key, a quota error, a timeout or bad JSON drops to a deterministic path: heuristics and templates, RIPPLE's own PDF statement parser, a fixed investigation chain. The sidebar says "Running on fallback model" or "AI unavailable · running on templates" when that happens; figures are unaffected either way.
 
 **Guardrails.** RIPPLE educates and models; it does not recommend securities, funds or insurance. Ask "which mutual fund should I buy" and it says so plainly, explains the concept (what a fund or SIP is), and shows the monthly amount, computed by us, that reaches your goal by its date. Refusals are logged and visible.
 
 ## Architecture
 
 ```
-SMS / CSV / PDF ──► parsers (src/lib/ingest) ──► Transaction[]  (contract/types.ts)
+SMS / CSV / Excel / PDF ──► parsers (src/lib/ingest) ──► Transaction[]  (contract/types.ts)
                                                      │
                       rules → starter list → model batch  (categorize)
                                                      │
@@ -107,10 +113,10 @@ Stack: Next.js 16 (App Router) and TypeScript, Tailwind v4 with a single token f
 | # | Requirement | Where it lives |
 |---|---|---|
 | 1 | Ingest messy bank data, categorize automatically | Import screen; `src/lib/ingest/` (SMS, CSV, Excel), `src/lib/engine/categorize.ts`, `/api/categorize`, `/api/vision` |
-| 2 | Correction loop that learns the rule | Review screen, rule modal, Rulebook; `/api/propose-rule`, `ruleMatches` in `categorize.ts` |
+| 2 | Correction loop that learns the rule | Review screen, rule modal, plain-language bulk rules, Rulebook; `/api/propose-rule`, `/api/bulk-rules`, `src/lib/engine/bulk-rules.ts` |
 | 3 | Recurring and subscription detection, alerts on change or non-use | Subscriptions & alerts; `src/lib/engine/recurring.ts`, `shifts.ts`, `/api/explain` |
 | 4 | Persistent financial profile | Goals & Profile; `src/lib/store.ts` (persisted), `src/lib/seed.ts` |
-| 5 | Goal planner with what-if simulation | Flow and Scenarios; `src/lib/engine/projection.ts`, `scenario.ts`, `/api/scenario` |
+| 5 | Goal planner with what-if simulation | Flow, Scenarios and the investigation agent; `src/lib/engine/projection.ts`, `scenario.ts`, `investigate.ts`, `/api/scenario`, `/api/investigate` |
 | 6 | Nudges when spending drifts | Flow and Subscriptions & alerts; `src/lib/engine/nudges.ts` |
 | 7 | Monthly review report | Monthly Review (printable); `src/lib/engine/review.ts`, `/api/narrative` |
 | 8 | Clear guardrails | Ask RIPPLE coach, refusal log, footer line; `src/lib/engine/coach.ts`, `/api/coach` |
@@ -128,12 +134,14 @@ npm run dev                       # http://localhost:3000
 |---|---|---|
 | `GROQ_API_KEY` | model categorization, rule proposals, scenario reading, PDF rows, narrative, coach | every path falls back to deterministic heuristics and templates |
 
-`npm test` runs the engine and parser tests. `node scripts/walk.mjs <dir>` drives a local Chrome through the whole demo path, screenshots every step and reports console errors (`BASE=<url>` points it at a deployment). Demo inputs live in `public/demo/`.
+`npm test` runs the engine, parser and privacy tests (85). `node scripts/walk.mjs <dir>` drives a local Chrome through the whole demo path, screenshots every step and reports console errors (`BASE=<url>` points it at a deployment). Demo inputs live in `public/demo/`.
 
 ## Known limitations
 
 - **"Unused" is inferred and confirmed, not detected.** A bank statement cannot show whether you use a subscription. RIPPLE infers it (a discretionary charge with no related spending) and asks; the user's mark is what counts.
-- **Vision inputs need a vision-capable key.** UPI screenshots and scanned PDFs need a vision model. The free Groq key used here has none, so those tabs say so and point to SMS or CSV. PDFs with a text layer work.
+- **Vision inputs need a vision-capable key.** UPI screenshots and scanned PDFs need a vision model. The free Groq key used here has none, so those tabs say so and point to SMS or CSV. PDFs with a text layer work, through the model or, when it is unavailable, RIPPLE's own parser. Uploads are capped at 3 MB.
+- **Free-tier quota.** The Groq free tier allows 200k tokens a day on the larger model. When it runs out, features drop to their deterministic paths and the sidebar says so.
+- **Income needs about three months of history.** Salary is detected as a regular monthly credit. With a shorter import, every screen says income was not detected and asks you to enter it.
 - **Model categorization varies between runs.** Unconfirmed guesses always land in Review, so a wrong one is visible and fixable, but two fresh runs can disagree on the same merchant.
 - **The advice history is seeded.** The demo profile is a user who has had RIPPLE for six months; the ghost line needs that history to exist on day one.
 - **Projections are trailing averages, not simulation.** The cone is the average ±1 standard deviation of the last six months. "Today" is pinned to 20 Nov 2026 so the demo is stable.

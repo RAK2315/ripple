@@ -16,6 +16,8 @@ RIPPLE is a money twin for an Indian user. It ingests messy bank data (CSV, past
 
 Plus: the **invisible salary** (fixed + subscriptions ÷ income, shown large), an **uncertainty cone** (3 runs: avg, avg ± 1σ), **provenance** (click any number → the rows behind it), and per the addendum: a **goal-impact lens** on every transaction and nudge ("this ₹2,400 pushes your laptop goal back 3 days" = amount ÷ monthly surplus × 30), **income/fixed-cost shift detection** with one-tap re-plan, and a **privacy pipeline** (mask account numbers, names, phones before every model call; "what the AI sees" panel).
 
+Two agentic surfaces sit on top: an **investigation agent** (Investigate in the sidebar: the model plans up to five tool calls over the engine, including `create_goal` for "I want X in N months" questions, each step streamed with its finding and rows, ending in one approvable action that cites the step it came from) and **plain-language bulk rules** on Review ("put all entries of Maheshwari Mart and Pintu Kumar as stationery" → one rule per merchant, user-defined categories created on confirm, previewed with match counts).
+
 **Hard rule: no rupee figure is ever produced by a language model.** Projections, goal dates, balances, totals, rule matching, recurring detection are arithmetic in `src/lib/engine/`. The model categorizes, normalizes merchants, proposes rules, explains changes, extracts scenarios from text, writes narrative around computed numbers (as `{placeholders}` our code fills), and transcribes PDF statement rows. Nothing else.
 
 ## Stack (locked, not revisited)
@@ -31,13 +33,13 @@ contract/        frozen interface (types.ts, schema, fixture.json) — imports n
 kirti/           ingestion brief for the parallel parser workstream (not merged; the app ships its own parsers in src/lib/ingest)
 src/
   app/           routes: / (Flow), /import, /review, /rules, /scenarios, /ghost, /subscriptions, /goals, /report
-  app/api/       server routes that call the model: categorize, propose-rule, scenario, explain, narrative, vision, sms-fallback, coach
-  lib/engine/    PURE arithmetic: categorize, merchants, recurring, projection, flows, scenario, nudges, shifts, ghost, review, coach
-  lib/ai/        model calls + privacy masking (mask.ts) + payload log for "what the AI sees"
+  app/api/       server routes that call the model: categorize, propose-rule, scenario, explain, narrative, vision, sms-fallback, coach, investigate, bulk-rules
+  lib/engine/    PURE arithmetic: categorize, merchants, recurring, projection, flows, scenario, nudges, shifts, ghost, review, coach, opportunities, investigate (agent tools + chain), bulk-rules
+  lib/ai/        model calls + privacy: protect.ts tokenizes every name in every payload at callApi (derived ids too), mask.ts second layer; meta.ts reports fallback/template use to the sidebar
   lib/store.ts   single Zustand store, persisted
   components/    one component per screen + shared (Money, ProvenanceDrawer, GoalImpact)
 scripts/         generate-fixture.mjs (fallback dataset + demo inputs)
-public/demo/     statement.csv, sms-dump.txt — the demo inputs
+public/demo/     statement.csv, sms-dump.txt, statement-oct.pdf, sms-shops.txt (Maheshwari Mart / Pintu Kumar, for the bulk-rule example) — the demo inputs
 ```
 
 Data flow: input → parser (src/lib/ingest, or the fixture) → `Transaction[]` (contract) → categorize pipeline (rules → starter list → LLM batch) → store → engine functions derive everything else on read (recurring, profile, projection, nudges, ghost). Derived numbers are never stored, only recomputed, so a rule change ripples through every screen.

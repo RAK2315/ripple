@@ -11,6 +11,7 @@
     "gen:fixture": "node scripts/generate-fixture.mjs"
   },
   "dependencies": {
+    "@ai-sdk/google": "^4.0.114",
     "@ai-sdk/groq": "^4.0.86",
     "ai": "^7.0.179",
     "next": "16.4.6",

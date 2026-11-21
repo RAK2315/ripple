@@ -2,7 +2,7 @@ import { generateText, tool } from "ai";
 import { groq } from "@ai-sdk/groq";
 import { z } from "zod";
 import { CATEGORIES } from "../../../contract/types";
-import { hasKey, MODELS } from "./model";
+import { fallbackModel, hasFallback, hasKey, MODELS } from "./model";
 import { mask } from "./mask";
 import { recordCall } from "./meta";
 
@@ -139,11 +139,7 @@ export type PlanResult = { tool: string; args: Record<string, unknown>; model: k
 
 /** Tries the smart model, then the fast one (separate free-tier quota), then gives up so the client's fixed chain takes over. */
 export async function planStep(opts: { system: string; prompt: string; mustConclude: boolean; timeoutMs?: number }): Promise<PlanResult> {
-  if (!hasKey()) {
-    recordCall("failed");
-    return null;
-  }
-  for (const model of ["smart", "fast"] as const) {
+  for (const model of hasKey() ? (["smart", "fast"] as const) : []) {
     try {
       const res = await generateText({
         model: groq(MODELS[model]),
@@ -163,6 +159,28 @@ export async function planStep(opts: { system: string; prompt: string; mustConcl
       }
     } catch (e) {
       console.error(`[ai] investigate step failed (${model}):`, (e as Error).message.slice(0, 200));
+    }
+  }
+  // Groq out (quota, error, no key): Gemini plans the same step with the same tools
+  if (hasFallback()) {
+    try {
+      const res = await generateText({
+        model: fallbackModel(),
+        system: opts.system,
+        prompt: opts.prompt,
+        tools: INVESTIGATE_TOOLS,
+        toolChoice: opts.mustConclude ? { type: "tool", toolName: "finish" } : "required",
+        temperature: 0,
+        abortSignal: AbortSignal.timeout(opts.timeoutMs ?? 20000),
+        maxRetries: 2,
+      });
+      const call = res.toolCalls[0];
+      if (call) {
+        recordCall("fallback");
+        return { tool: call.toolName, args: (call.input ?? {}) as Record<string, unknown>, model: "fast" };
+      }
+    } catch (e) {
+      console.error("[ai] investigate step failed (gemini):", (e as Error).message.slice(0, 200));
     }
   }
   recordCall("failed");

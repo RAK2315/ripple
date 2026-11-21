@@ -133,6 +133,8 @@ npm run dev                       # http://localhost:3000
 | Variable | Needed for | Without it |
 |---|---|---|
 | `GROQ_API_KEY` | model categorization, rule proposals, scenario reading, PDF rows, narrative, coach | every path falls back to deterministic heuristics and templates |
+| `GEMINI_API_KEY` | fallback provider: any Groq call that fails (quota, rate limit, error) is retried on Gemini before a template; `GEMINI_MODEL` overrides the model | Groq failures go straight to the deterministic path |
+| `ELEVENLABS_API_KEY` | demo video voiceover only; the app never reads it | nothing |
 
 `npm test` runs the engine, parser and privacy tests (85). `node scripts/walk.mjs <dir>` drives a local Chrome through the whole demo path, screenshots every step and reports console errors (`BASE=<url>` points it at a deployment). Demo inputs live in `public/demo/`.
 

@@ -8,6 +8,7 @@ import { ProvenanceDrawer } from "./provenance-drawer";
 import { AiPanel } from "./ai-panel";
 import { CoachDrawer } from "@/components/coach/coach-drawer";
 import { ThemeToggle } from "./theme-toggle";
+import { Mark } from "./mark";
 import { useEffect } from "react";
 import { categorizeUnmatched } from "@/lib/actions";
 
@@ -53,8 +54,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen">
       <aside className="no-print sticky top-0 flex h-screen w-60 shrink-0 flex-col border-r border-line bg-card px-4 py-6">
         <Link href="/" className="mb-8 block px-2">
-          <div className="font-display text-[30px] leading-none tracking-tight">
-            Ripple<span className="text-accent">.</span>
+          <div className="flex items-center gap-2">
+            <Mark size={28} />
+            <span className="font-display text-[30px] leading-none tracking-tight">
+              Ripple<span className="text-accent">.</span>
+            </span>
           </div>
           <div className="mt-2 text-xs leading-snug text-muted">See where your money is going, and where it ends up.</div>
         </Link>

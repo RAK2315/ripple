@@ -44,7 +44,7 @@ export async function POST(req: Request) {
       const r = res?.results.find((x) => x.i === i);
       if (r) {
         usedModel = true;
-        out[it.key] = { category: r.category as Category, confidence: r.confidence, merchant: r.merchant || it.merchant };
+        out[it.key] = { category: r.category as Category, confidence: r.confidence, merchant: r.merchant && !/\[|XX\d/.test(r.merchant) ? r.merchant : it.merchant };
       } else {
         const h = heuristicCategory(it.description, it.direction, it);
         out[it.key] = { ...h, merchant: it.merchant };

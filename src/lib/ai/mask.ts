@@ -27,6 +27,8 @@ export function mask(text: string): string {
   out = out.replace(/(UPI(?:-AUTOPAY)?\/)([^/]+)(\/)/gi, (m, a, name, b) => (looksLikePerson(name) ? `${a}[NAME]${b}` : m));
   // "To NAME" / "trf to NAME" / IMPS/P2A/ref/NAME
   out = out.replace(/(\bTo |trf to |P2A\/XX\d{4}\/)([A-Za-z]+(?: [A-Za-z]+){1,2})/g, (m, a, name) => (looksLikePerson(name) ? `${a}[NAME]` : m));
+  // a bare payee name as the whole description (SMS parser output: "SUNITA MEHTA")
+  if (looksLikePerson(out)) out = "[NAME]";
   out = out.replace(/\bDear ([A-Z][a-z]+)\b(?! (Customer|UPI|User|SBI))/g, "Dear [NAME]");
   return out;
 }

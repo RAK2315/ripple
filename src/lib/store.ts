@@ -5,6 +5,7 @@ import fixture from "../../contract/fixture.json";
 import type { Advice, AiPayloadLog, Category, FixedCost, Goal, LlmCategory, Profile, RefusalLog, Rule, Scenario, Transaction } from "./types";
 import { DEMO_GOALS, DEMO_PROFILE, MAIN_SCENARIO } from "./seed";
 import { STORE_KEY } from "./config";
+import { normalizeMerchant } from "./engine/merchants";
 
 /** Source data only. Everything derived is computed in engine/ via useDerived(). */
 interface State {
@@ -69,7 +70,7 @@ const empty: State = {
   lastImport: null,
 };
 
-const dedupKey = (t: Transaction) => `${t.date}|${t.amount}|${t.direction}|${t.raw_description.toUpperCase()}`;
+const dedupKey = (t: Transaction) => `${t.date}|${t.amount}|${t.direction}|${normalizeMerchant(t.raw_description).toUpperCase()}`;
 
 export const useStore = create<State & Actions>()(
   persist(

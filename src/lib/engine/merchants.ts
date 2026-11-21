@@ -88,6 +88,7 @@ export function normalizeMerchant(raw: string): string {
   if ((m = u.match(/^UPI(?:-AUTOPAY)?\/([^/]+)\//))) return cleanPayee(m[1]);
   if ((m = u.match(/^UPI-([^-]+)-/))) return cleanPayee(m[1]);
   if ((m = u.match(/^POS \S+ (.+)$/))) return titleCase(m[1].replace(/\b(PUNE|MUMBAI|BANGALORE|BENGALURU|DELHI|IN)\b/g, ""));
+  if (/@[A-Z]+$/.test(u) && !u.includes(" ")) return cleanPayee(u);
   if ((m = u.match(/^NEFT CR-[A-Z0-9]+-([^-]+)/))) return titleCase(m[1]);
   if ((m = u.match(/^BIL\/BPAY\/\d+\/(.+)$/))) return titleCase(m[1]);
   if (u.includes("/")) return titleCase(u.split("/")[0]);

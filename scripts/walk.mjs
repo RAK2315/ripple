@@ -20,6 +20,7 @@ await page.getByRole("button", { name: "Parse messages" }).click();
 await page.getByText("Need review").waitFor({ timeout: 90000 });
 await page.waitForFunction(() => !document.body.innerText.includes("Categorizing"), null, { timeout: 120000 });
 await shot("1-import");
+console.log("import:", (await page.locator("main").innerText()).split(String.fromCharCode(10)).filter((l) => /^\d+$/.test(l.trim())).slice(0, 4).join(" / "), "(parsed / added / categorized / review)");
 await page.goto(`${base}/review`);
 await page.waitForTimeout(800);
 await shot("2-review");
@@ -37,6 +38,8 @@ await shot("5-rulebook");
 await page.goto(`${base}/`);
 await page.waitForTimeout(1500);
 await shot("6-flow");
+await page.waitForTimeout(600);
+console.log("invisible salary:", (await page.locator(".figure-hero").first().innerText()).trim(), "| flow regret:", (await page.locator(".figure-hero").nth(1).innerText()).trim());
 // B4: NL scenario -> editable fields -> run -> diff vs main
 await page.goto(`${base}/scenarios`);
 await page.getByLabel("What if sentence").fill("what if rent goes up by 6000 and I cut eating out by a third");

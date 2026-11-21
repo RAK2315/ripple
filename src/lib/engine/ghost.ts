@@ -57,7 +57,14 @@ export interface Ghost {
   potByMonth: Record<string, number>;
 }
 
-export function computeGhost(advice: Advice[], txns: Transaction[], months: string[], today: string, annualRate: number): Ghost {
+export function computeGhost(
+  advice: Advice[],
+  txns: Transaction[],
+  months: string[],
+  today: string,
+  annualRate: number,
+  evidence: Record<string, string[]> = {},
+): Ghost {
   const open = advice.filter((a) => !a.accepted);
   const asOf = ym(today);
   const items = open
@@ -65,7 +72,7 @@ export function computeGhost(advice: Advice[], txns: Transaction[], months: stri
       advice: a,
       months: monthsSince(ym(a.date_given), asOf),
       amount: potAt(a.projected_monthly_saving, ym(a.date_given), asOf, annualRate),
-      evidenceIds: adviceEvidence(a, txns),
+      evidenceIds: evidence[a.id] ?? adviceEvidence(a, txns),
     }))
     .sort((x, y) => y.amount - x.amount);
   const potByMonth: Record<string, number> = {};

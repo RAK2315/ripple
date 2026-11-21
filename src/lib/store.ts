@@ -18,6 +18,8 @@ interface State {
   goals: Goal[];
   scenarios: Scenario[];
   advice: Advice[];
+  /** evidence rows for advice generated live (seeded advice is matched by text) */
+  adviceEvidence: Record<string, string[]>;
   markedUnused: Record<string, boolean>;
   nudgeAcks: Record<string, boolean>;
   refusals: RefusalLog[];
@@ -44,6 +46,7 @@ interface Actions {
   setActiveScenario: (id: string) => void;
   acceptAdvice: (id: string, date: string) => void;
   addAdvice: (a: Advice[]) => void;
+  addLiveAdvice: (items: { advice: Advice; evidence: string[] }[]) => number;
   setUnused: (recurringId: string, unused: boolean) => void;
   ackNudge: (id: string) => void;
   logRefusal: (q: string) => void;
@@ -61,6 +64,7 @@ const empty: State = {
   goals: DEMO_GOALS,
   scenarios: [MAIN_SCENARIO],
   advice: [],
+  adviceEvidence: {},
   markedUnused: {},
   nudgeAcks: {},
   refusals: [],
@@ -112,6 +116,15 @@ export const useStore = create<State & Actions>()(
         })),
       setActiveScenario: (activeScenarioId) => set({ activeScenarioId }),
       acceptAdvice: (id, date) => set((s) => ({ advice: s.advice.map((a) => (a.id === id ? { ...a, accepted: true, acted_on_date: date } : a)) })),
+      addLiveAdvice: (items) => {
+        const fresh = items.filter((x) => !get().advice.some((a) => a.id === x.advice.id));
+        // appended after the seeded history, never replacing it
+        set((s) => ({
+          advice: [...s.advice, ...fresh.map((x) => x.advice)],
+          adviceEvidence: { ...s.adviceEvidence, ...Object.fromEntries(fresh.map((x) => [x.advice.id, x.evidence])) },
+        }));
+        return fresh.length;
+      },
       addAdvice: (a) => set((s) => ({ advice: [...s.advice, ...a.filter((x) => !s.advice.some((y) => y.text === x.text))] })),
       setUnused: (rid, unused) => set((s) => ({ markedUnused: { ...s.markedUnused, [rid]: unused } })),
       ackNudge: (id) => set((s) => ({ nudgeAcks: { ...s.nudgeAcks, [id]: true } })),

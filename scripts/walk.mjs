@@ -58,6 +58,22 @@ if (process.env.ONLY !== "core") {
   await page.waitForTimeout(1200);
   await shot("9-ghost");
   console.log("regret:", await page.getByTestId("regret").innerText());
+  // P1: live advice agent
+  const gapText = async () => (await page.locator("main").innerText()).match(/gap grows by\s*(₹[\d,]+)/)?.[1];
+  const gapBefore = await gapText();
+  await page.getByTestId("find-opportunities").click();
+  await page.getByText(/new piece|already on this list|No new savings/).waitFor({ timeout: 90000 });
+  await page.waitForTimeout(800);
+  const rows = await page.getByTestId("advice-row").allInnerTexts();
+  const fresh = rows.filter((r) => /\bNew\b/.test(r));
+  console.log("live advice:", fresh.length, "new |", fresh.map((r) => r.replace(/\s+/g, " ").slice(0, 150)).join(" || "));
+  console.log("regret after generate:", (await page.getByTestId("regret").innerText()).trim(), "| gap/month", gapBefore, "->", await gapText());
+  await shot("9b-ghost-live-advice");
+  if (fresh.length) {
+    await page.getByTestId("advice-row").filter({ hasText: "New" }).first().getByRole("button", { name: "Accept" }).click();
+    await page.waitForTimeout(800);
+    console.log("after accepting one live advice: gap/month", await gapText());
+  }
   // B6: subscriptions, graveyard, changed alert, shift re-plan
   await page.goto(`${base}/subscriptions`);
   await page.getByTestId("graveyard").waitFor();

@@ -1,5 +1,5 @@
 "use client";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Area, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useStore } from "@/lib/store";
@@ -13,12 +13,13 @@ import { useUi } from "@/lib/ui";
 import { PageHeader } from "@/components/shell/shell";
 import { CountUp } from "@/components/money";
 import { AXIS_TICK } from "@/components/flow/timeline";
+import { generateAdvice } from "@/lib/actions";
 
 export function GhostScreen() {
   const s = useStore();
   const d = useDerived();
   const months = useMemo(() => [...d.history.map((h) => h.month), ...d.main.points.map((p) => p.month)], [d.history, d.main.points]);
-  const ghost = useMemo(() => computeGhost(s.advice, d.categorized, months, APP_TODAY, GHOST_ANNUAL_RATE), [s.advice, d.categorized, months]);
+  const ghost = useMemo(() => computeGhost(s.advice, d.categorized, months, APP_TODAY, GHOST_ANNUAL_RATE, s.adviceEvidence), [s.advice, d.categorized, months, s.adviceEvidence]);
   const rows = useMemo(
     () => ghostSeries(d.history, d.main.points, ghost.potByMonth).map((r) => ({ ...r, gap: [r.real, r.ghost] as [number, number] })),
     [d.history, d.main.points, ghost.potByMonth],
@@ -154,14 +155,20 @@ export function GhostScreen() {
       </div>
 
       <div className="card divide-y divide-line">
-        <div className="px-6 py-4">
-          <h2>Advice not taken</h2>
-          <p className="text-xs text-muted">Accepting moves it out of the regret number from today. The rupee amounts come from our arithmetic on your data, never from the model.</p>
+        <div className="flex items-start justify-between gap-6 px-6 py-4">
+          <div>
+            <h2>Advice not taken</h2>
+            <p className="text-xs text-muted">Accepting moves it out of the regret number from today. The rupee amounts come from our arithmetic on your data, never from the model.</p>
+          </div>
+          <FindOpportunities />
         </div>
         {open.length === 0 && <div className="px-6 py-6 text-sm text-muted">Nothing outstanding. Your ghost is you.</div>}
         {open.map((i) => (
           <div key={i.advice.id} className="grid grid-cols-[90px_1fr_150px_110px] items-center gap-4 px-6 py-3" data-testid="advice-row">
-            <div className="text-xs text-muted">{i.advice.date_given}</div>
+            <div className="text-xs text-muted">
+              {i.advice.date_given}
+              {i.advice.id.startsWith("adv_live_") && <div className="mt-1 w-fit rounded-md bg-ghost-soft px-2 py-1 text-[11px] font-medium text-ghost">New</div>}
+            </div>
             <div>
               <div className="text-sm">{i.advice.text}</div>
               <div className="mt-1 text-xs text-muted">
@@ -204,6 +211,39 @@ export function GhostScreen() {
         The advice history is seeded: this demo profile is a user who has had RIPPLE for six months. Ghost pot = each monthly saving banked at month end after the advice,
         growing at {GHOST_ANNUAL_RATE * 100}% a year.
       </p>
+    </div>
+  );
+}
+
+/** Runs the live advice agent: engine finds and prices, the model picks three and words them. */
+function FindOpportunities() {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  return (
+    <div className="flex shrink-0 flex-col items-end gap-1">
+      <button
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          setNote(null);
+          const r = await generateAdvice();
+          setBusy(false);
+          setNote(
+            r.added
+              ? `${r.added} new piece${r.added === 1 ? "" : "s"} of advice from your last three months.`
+              : r.covered
+                ? "Your biggest opportunities are already on this list."
+                : "No new savings opportunities in your recent spending.",
+          );
+          useUi.getState().showToast(r.added ? `${r.added} new opportunities found. Savings are computed from your transactions.` : "Nothing new to add.");
+        }}
+        className="rounded-md border border-ghost/40 px-3 py-2 text-sm text-ghost transition-colors hover:bg-ghost-soft disabled:opacity-50"
+        data-testid="find-opportunities"
+      >
+        {busy ? "Analysing your history…" : "Find new opportunities"}
+      </button>
+      {busy && <div className="skeleton h-2 w-40" aria-busy="true" />}
+      {note && <div className="max-w-xs text-right text-xs text-muted">{note}</div>}
     </div>
   );
 }

@@ -31,7 +31,7 @@ export function FlowScreen() {
     () => (isFuture ? plannedFlows(selected, d.active.plan, d.recurring) : actualFlows(selected, d.categorized, d.recurring)),
     [isFuture, selected, d.active.plan, d.recurring, d.categorized],
   );
-  const ghost = useMemo(() => computeGhost(s.advice, d.categorized, [current], APP_TODAY, GHOST_ANNUAL_RATE), [s.advice, d.categorized, current]);
+  const ghost = useMemo(() => computeGhost(s.advice, d.categorized, [current], APP_TODAY, GHOST_ANNUAL_RATE, s.adviceEvidence), [s.advice, d.categorized, current, s.adviceEvidence]);
 
   if (s.transactions.length === 0) return <ColdOpen />;
 

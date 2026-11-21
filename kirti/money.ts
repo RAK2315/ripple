@@ -27,6 +27,8 @@ export interface ParsedMoney {
  * Parses monetary strings from CSVs or SMS.
  * Handles Indian grouping (1,12,430.55), currency prefixes (₹, Rs., INR),
  * and suffixes (Dr, Cr).
+ *
+ * Strictly rejects non-numeric amounts like "12abc" returning null.
  */
 export function parseMoneyString(raw: string): ParsedMoney | null {
   if (!raw) return null;
@@ -58,6 +60,12 @@ export function parseMoneyString(raw: string): ParsedMoney | null {
   // Remove commas and spaces
   const clean = str.replace(/,/g, "").trim();
   if (!clean) return null;
+
+  // Strict numeric validation: only digits with optional single decimal point
+  // Rejects strings like "12abc" or "12.34.56"
+  if (!/^(?:\d+|\d+\.\d+|\.\d+)$/.test(clean)) {
+    return null;
+  }
 
   const num = parseFloat(clean);
   if (isNaN(num)) return null;

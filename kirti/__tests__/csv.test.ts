@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseCsv } from "../csv";
+import { parseIndianDate } from "../dates";
+import { parseMoneyString } from "../money";
 
 describe("CSV Parser", () => {
   it("1. passes the worked example from BRIEF.md with full toEqual", () => {
@@ -126,5 +128,40 @@ describe("CSV Parser", () => {
       raw_description:
         "NEFT CR-CITI0000002-ACME TECHNOLOGIES PVT LTD-SALARY APR 2026",
     });
+  });
+
+  it("5. rejects impossible calendar dates with bad_date (Contract section 3)", () => {
+    expect(parseIndianDate("2026-13-45")).toBeNull();
+    expect(parseIndianDate("2026-02-31")).toBeNull();
+    expect(parseIndianDate("31/02/2026")).toBeNull();
+
+    const csv = [
+      "Date,Description,Amount",
+      "2026-13-45,BAD DATE TEST,500.00",
+      "2026-02-31,FEBRUARY 31 TEST,1000.00",
+    ].join("\n");
+
+    const res = parseCsv(csv);
+    expect(res.stats.total_inputs).toBe(2);
+    expect(res.stats.parsed).toBe(0);
+    expect(res.stats.unparsed).toBe(2);
+    expect(res.unparsed[0].reason).toBe("bad_date");
+    expect(res.unparsed[1].reason).toBe("bad_date");
+  });
+
+  it("6. rejects non-numeric amounts like '12abc' with bad_amount", () => {
+    expect(parseMoneyString("12abc")).toBeNull();
+    expect(parseMoneyString("abc")).toBeNull();
+
+    const csv = [
+      "Date,Description,Amount",
+      "2026-11-14,TEST CORRUPT AMOUNT,12abc",
+    ].join("\n");
+
+    const res = parseCsv(csv);
+    expect(res.stats.total_inputs).toBe(1);
+    expect(res.stats.parsed).toBe(0);
+    expect(res.stats.unparsed).toBe(1);
+    expect(res.unparsed[0].reason).toBe("bad_amount");
   });
 });

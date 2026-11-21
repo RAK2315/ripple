@@ -389,7 +389,27 @@ export function parseCsv(text: string, opts?: ParseCsvOptions): ParseResult {
       // 3. Narration extraction
       const descRaw = colMap.descCol >= 0 ? cells[colMap.descCol] ?? "" : "";
       const rawDescription = descRaw.replace(/\s+/g, " ").trim();
-      const finalDescription = rawDescription || "TRANSACTION";
+      let finalDescription = rawDescription;
+      if (!finalDescription) {
+        // Look for any non-empty cell in the row that isn't date or amount
+        for (let c = 0; c < cells.length; c++) {
+          if (
+            c !== colMap.dateCol &&
+            c !== colMap.amountCol &&
+            c !== colMap.debitCol &&
+            c !== colMap.creditCol
+          ) {
+            const val = cells[c]?.trim();
+            if (val) {
+              finalDescription = val;
+              break;
+            }
+          }
+        }
+        if (!finalDescription) {
+          finalDescription = rawLine.slice(0, 50).trim() || "ROW";
+        }
+      }
 
       const txId = `csv_${String(transactions.length + 1).padStart(4, "0")}`;
 

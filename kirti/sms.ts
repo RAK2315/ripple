@@ -134,16 +134,19 @@ export async function parseSms(
               });
             } else {
               viaLlmCount++;
+              let desc = row.merchant;
+              if (!desc) {
+                const refMatch = item.raw.match(
+                  /\b(?:ref(?:\s*no)?|upi|rrn)[:\s]*([0-9]{6,16})\b/i
+                );
+                desc = refMatch ? `REF ${refMatch[1]}` : item.raw.slice(0, 40).trim();
+              }
               pendingParsed.push({
                 index: item.index,
                 date: row.date,
                 amount: Math.round(row.amount),
                 direction: row.direction || "debit",
-                raw_description:
-                  row.merchant ||
-                  (row.direction === "credit"
-                    ? "SMS CREDIT"
-                    : "SMS DEBIT"),
+                raw_description: desc,
                 account_tail: row.account_tail,
                 source_line: item.raw,
                 viaLlm: true,

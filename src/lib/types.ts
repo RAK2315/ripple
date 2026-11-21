@@ -18,6 +18,10 @@ export interface Rule {
   learned_from_transaction_id: string | null;
   created_at: string;
   active: boolean;
+  /** how the rule was made: learned from one correction, or typed as a plain-language instruction on Review */
+  source?: "correction" | "instruction";
+  /** the instruction it came from, when source = "instruction" */
+  instruction?: string;
 }
 
 export interface LlmCategory {

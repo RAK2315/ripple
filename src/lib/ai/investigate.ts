@@ -14,7 +14,7 @@ import { recordCall } from "./meta";
 
 const rawAssumption = z.object({
   kind: z.enum(["category_pct", "category_abs", "category_set", "income_change", "income_pct", "income_stop", "one_off", "add_recurring", "remove_recurring", "goal_change"]),
-  category: z.enum(CATEGORIES).nullable().optional(),
+  category: z.string().nullable().optional().describe("a category name from the tool results or the built-in list"),
   pct: z.number().nullable().optional().describe("percent change, negative for cuts (cut by a fifth = -20)"),
   amount_rupees: z.number().nullable().optional().describe("rupee parameter; positive = more spending or income"),
   label: z.string().nullable().optional(),
@@ -30,7 +30,7 @@ export const INVESTIGATE_TOOLS = {
   query_transactions: tool({
     description: "Filter the user's transactions. Returns count, total, monthly totals and top merchants. All filters optional.",
     inputSchema: z.object({
-      category: z.enum(CATEGORIES).nullable().optional(),
+      category: z.string().nullable().optional().describe("a category name from the tool results or the built-in list"),
       date_from: z.string().nullable().optional().describe("YYYY-MM-DD"),
       date_to: z.string().nullable().optional().describe("YYYY-MM-DD"),
       merchant: z.string().nullable().optional().describe("substring of the merchant name"),
@@ -52,7 +52,7 @@ export const INVESTIGATE_TOOLS = {
   }),
   get_category_trend: tool({
     description: "Monthly spend in one category over the last N complete months, with the change.",
-    inputSchema: z.object({ category: z.enum(CATEGORIES), months: z.number().nullable().optional().describe("2-12, default 6") }),
+    inputSchema: z.object({ category: z.string().describe("a category name, built-in or the user's own"), months: z.number().nullable().optional().describe("2-12, default 6") }),
   }),
   run_projection: tool({
     description: "Project what happens to surplus and goal dates under hypothetical assumptions, without saving anything.",

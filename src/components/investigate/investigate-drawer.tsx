@@ -75,6 +75,7 @@ export function InvestigateDrawer() {
       mainAssumptions: chainAssumptions(s.scenarios, "main"),
       advice: s.advice,
       today: APP_TODAY,
+      categories: s.customCategories,
     };
     const fallback = fallbackPlanner(ctx);
     let offline = false;

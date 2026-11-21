@@ -28,6 +28,8 @@ interface State {
   recurringNotes: Record<string, string>;
   activeScenarioId: string;
   lastImport: { at: string; source: string; parsed: number; unparsed: number } | null;
+  /** categories the user added (e.g. "Stationery"), beyond the contract's fixed list */
+  customCategories: string[];
 }
 
 interface Actions {
@@ -53,6 +55,7 @@ interface Actions {
   logRefusal: (q: string) => void;
   logAi: (route: string, payload: string) => void;
   setRecurringNote: (id: string, note: string) => void;
+  addCategories: (names: string[]) => void;
 }
 
 const empty: State = {
@@ -73,6 +76,7 @@ const empty: State = {
   recurringNotes: {},
   activeScenarioId: "main",
   lastImport: null,
+  customCategories: [],
 };
 
 const dedupKey = (t: Transaction) => `${t.date}|${t.amount}|${t.direction}|${normalizeMerchant(t.raw_description).toUpperCase()}`;
@@ -132,6 +136,8 @@ export const useStore = create<State & Actions>()(
       logRefusal: (question) => set((s) => ({ refusals: [{ id: crypto.randomUUID(), at: new Date().toISOString(), question }, ...s.refusals] })),
       logAi: (route, masked_payload) =>
         set((s) => ({ aiLog: [{ id: crypto.randomUUID(), at: new Date().toISOString(), route, masked_payload }, ...s.aiLog].slice(0, 30) })),
+      addCategories: (names) =>
+        set((s) => ({ customCategories: [...new Set([...s.customCategories, ...names.filter(Boolean)])] })),
       setRecurringNote: (id, note) => set((s) => ({ recurringNotes: { ...s.recurringNotes, [id]: note } })),
     }),
     {
@@ -164,7 +170,7 @@ export function isValidState(v: unknown): boolean {
   const s = v as Record<string, unknown>;
   const arr = (k: string) => s[k] === undefined || Array.isArray(s[k]);
   const obj = (k: string) => s[k] === undefined || (!!s[k] && typeof s[k] === "object" && !Array.isArray(s[k]));
-  if (!["transactions", "rules", "goals", "scenarios", "advice", "refusals", "aiLog", "fixedCosts"].every(arr)) return false;
+  if (!["transactions", "rules", "goals", "scenarios", "advice", "refusals", "aiLog", "fixedCosts", "customCategories"].every(arr)) return false;
   if (!["llmCache", "userOverrides", "profile", "adviceEvidence", "markedUnused", "nudgeAcks", "recurringNotes"].every(obj)) return false;
   const txOk = ((s.transactions as unknown[]) ?? []).every((t) => {
     const x = t as Record<string, unknown>;

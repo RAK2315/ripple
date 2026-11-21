@@ -1,6 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
-import { CATEGORIES } from "../../../contract/types";
+import { allCategories } from "@/lib/engine/bulk-rules";
+import { BulkRules } from "./bulk-rules";
 import type { Category, Transaction } from "@/lib/types";
 import { useDerived } from "@/lib/derived";
 import { useStore } from "@/lib/store";
@@ -14,6 +15,8 @@ const SOURCE_LABEL: Record<string, string> = { rule: "rule", starter_list: "know
 
 export function ReviewScreen() {
   const d = useDerived();
+  const customCategories = useStore((s) => s.customCategories);
+  const categories = useMemo(() => allCategories(customCategories), [customCategories]);
   const setOverride = useStore((s) => s.setOverride);
   const [filter, setFilter] = useState<"review" | "all">("review");
   const [q, setQ] = useState("");
@@ -64,6 +67,8 @@ export function ReviewScreen() {
         </div>
       </div>
 
+      <BulkRules categorized={d.categorized} />
+
       <div className="card divide-y divide-line">
         {rows.length === 0 && <div className="p-8 text-center text-sm text-muted">Nothing needs review. Every row is categorized with confidence.</div>}
         {rows.slice(0, 300).map((t) => {
@@ -94,7 +99,7 @@ export function ReviewScreen() {
                   className={`w-full rounded-lg border px-2 py-1 text-sm ${low ? "border-warn" : "border-line"} bg-card`}
                 >
                   {low && <option value="">{(t.confidence ?? 0) > 0 ? `${t.category}?` : "Pick a category"}</option>}
-                  {CATEGORIES.map((c) => (
+                  {categories.map((c) => (
                     <option key={c}>{c}</option>
                   ))}
                 </select>

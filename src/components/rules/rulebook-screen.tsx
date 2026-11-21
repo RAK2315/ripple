@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useState } from "react";
-import { CATEGORIES } from "../../../contract/types";
+import { allCategories } from "@/lib/engine/bulk-rules";
 import type { Category } from "@/lib/types";
 import { useDerived } from "@/lib/derived";
 import { useStore } from "@/lib/store";
@@ -13,6 +13,7 @@ export function RulebookScreen() {
   const d = useDerived();
   const rules = useStore((s) => s.rules);
   const update = useStore((s) => s.updateRule);
+  const customCategories = useStore((s) => s.customCategories);
   const del = useStore((s) => s.deleteRule);
   const show = useUi((s) => s.showProvenance);
   const [editing, setEditing] = useState<string | null>(null);
@@ -45,7 +46,8 @@ export function RulebookScreen() {
                 <div className="flex-1">
                   <div className="text-[15px] font-medium">{ruleToEnglish(r)}</div>
                   <div className="mt-2 text-xs text-muted">
-                    Learned {new Date(r.created_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
+                    {r.source === "instruction" ? "From your instruction" : "Learned"} {new Date(r.created_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
+                    {r.source === "instruction" && r.instruction && <> · “{r.instruction}”</>}
                     {src && (
                       <>
                         {" "}
@@ -65,7 +67,7 @@ export function RulebookScreen() {
                 <div className="mt-3 flex gap-2 text-sm">
                   <input value={r.pattern} onChange={(e) => update(r.id, { pattern: e.target.value.toUpperCase() })} className="flex-1 rounded-lg border border-line px-2 py-2 font-mono" />
                   <select value={r.category} onChange={(e) => update(r.id, { category: e.target.value as Category })} className="rounded-lg border border-line px-2 py-2">
-                    {CATEGORIES.map((c) => (
+                    {allCategories(customCategories).map((c) => (
                       <option key={c}>{c}</option>
                     ))}
                   </select>

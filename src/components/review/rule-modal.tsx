@@ -1,6 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
-import { CATEGORIES } from "../../../contract/types";
+import { allCategories } from "@/lib/engine/bulk-rules";
 import type { Category, Rule, RuleType, Transaction } from "@/lib/types";
 import { previewRule, ruleToEnglish } from "@/lib/engine/categorize";
 import { useStore } from "@/lib/store";
@@ -32,12 +32,13 @@ export function RuleModal({
   onClose: () => void;
 }) {
   const addRule = useStore((s) => s.addRule);
+  const customCategories = useStore((s) => s.customCategories);
   const toast = useUi((s) => s.showToast);
   const [edit, setEdit] = useState<Proposal | null>(null);
   const [cat, setCat] = useState<Category>(category);
   const p = edit ?? proposal;
   const rule: Rule | null = p
-    ? { id: "preview", ...p, category: cat, learned_from_transaction_id: source.id, created_at: new Date().toISOString(), active: true }
+    ? { id: "preview", ...p, category: cat, learned_from_transaction_id: source.id, created_at: new Date().toISOString(), active: true, source: "correction" as const }
     : null;
   const preview = useMemo(() => (rule ? previewRule(rule, categorized) : null), [rule, categorized]);
 
@@ -71,7 +72,7 @@ export function RuleModal({
               </select>
               <input value={p.pattern} onChange={(e) => setEdit({ ...p, pattern: e.target.value.toUpperCase() })} className="rounded-lg border border-line px-2 py-2 font-mono" />
               <select value={cat} onChange={(e) => setCat(e.target.value as Category)} className="rounded-lg border border-line px-2 py-2">
-                {CATEGORIES.map((c) => (
+                {allCategories(customCategories).map((c) => (
                   <option key={c}>{c}</option>
                 ))}
               </select>

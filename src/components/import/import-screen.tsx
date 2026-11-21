@@ -169,6 +169,9 @@ export function ImportScreen() {
               >
                 Use demo SMS dump
               </button>
+              <button onClick={async () => setText(await (await fetch("/demo/sms-shops.txt")).text())} className="text-sm text-muted underline-offset-2 hover:text-ink hover:underline">
+                Add shop SMS (Maheshwari Mart, Pintu Kumar)
+              </button>
             </div>
           </>
         )}

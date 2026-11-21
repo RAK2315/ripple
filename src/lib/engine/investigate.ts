@@ -39,6 +39,8 @@ export interface InvestigateCtx {
   today: string;
   /** the user's question: create_goal only accepts a price the user actually stated in it */
   question?: string;
+  /** the user's own categories (e.g. "Stationery"), valid everywhere a built-in one is */
+  categories?: string[];
 }
 
 export interface ScenarioDraft {
@@ -69,9 +71,11 @@ export interface ToolResult {
 
 const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : typeof v === "string" && v.trim() && Number.isFinite(+v) ? +v : undefined);
-const asCategory = (v: unknown): Category | undefined => {
+/** A category name from the fixed list or the user's own (ctx.categories), case-insensitive. */
+const asCategory = (v: unknown, ctx?: InvestigateCtx): Category | undefined => {
   const s = str(v);
-  return s ? (CATEGORIES as readonly string[]).find((c) => c.toLowerCase() === s.toLowerCase()) as Category | undefined : undefined;
+  const list: readonly string[] = [...CATEGORIES, ...(ctx?.categories ?? [])];
+  return s ? (list.find((c) => c.toLowerCase() === s.toLowerCase()) as Category | undefined) : undefined;
 };
 const sum = (xs: Transaction[]) => xs.reduce((a, t) => a + t.amount, 0);
 const merchantOf = (t: Transaction) => t.merchant_normalized ?? t.raw_description;
@@ -82,7 +86,7 @@ function mainProjection(ctx: InvestigateCtx, extra: Assumption[] = []): Projecti
 }
 
 function queryTransactions(ctx: InvestigateCtx, args: Record<string, unknown>): ToolResult {
-  const category = asCategory(args.category);
+  const category = asCategory(args.category, ctx);
   const merchant = str(args.merchant)?.toLowerCase();
   const from = str(args.date_from);
   const to = str(args.date_to);
@@ -196,7 +200,7 @@ function getProfile(ctx: InvestigateCtx): ToolResult {
 }
 
 function getCategoryTrend(ctx: InvestigateCtx, args: Record<string, unknown>): ToolResult {
-  const category = asCategory(args.category);
+  const category = asCategory(args.category, ctx);
   if (!category) return { tool: "get_category_trend", args, finding: `Unknown category "${String(args.category ?? "")}".`, ids: [], data: { error: "unknown category", categories: CATEGORIES }, error: true };
   const n = Math.min(12, Math.max(2, Math.round(num(args.months) ?? 6)));
   const months = completeMonthsBefore(ctx.today, ctx.txns, n);

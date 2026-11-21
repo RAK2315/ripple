@@ -23,7 +23,7 @@ export async function categorizeUnmatched(): Promise<{ sent: number; usedModel: 
     else pending.set(key, { key, description: t.raw_description, direction: t.direction, merchant: normalizeMerchant(t.raw_description), amount_rupees: Math.round(t.amount / 100), day: +t.date.slice(8, 10), count: 1 });
   }
   if (pending.size === 0) return { sent: 0, usedModel: false };
-  const res = await callApi<Record<string, LlmCategory>>("categorize", { items: [...pending.values()] });
+  const res = await callApi<Record<string, LlmCategory>>("categorize", { items: [...pending.values()], customCategories: s.customCategories });
   if (res.ok && res.data) useStore.getState().setLlmCache(res.data);
   return { sent: pending.size, usedModel: !!res.usedModel };
 }

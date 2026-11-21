@@ -1,5 +1,7 @@
 # Rehaan's Build Plan — RIPPLE
 
+> **Outcome.** This is the plan the app was built from on 21 Nov 2026, kept as written. All ten blocks shipped; block-by-block status is in [`CLAUDE.md`](../CLAUDE.md#status) and the result is described in the [README](../README.md). Two plan items changed on the day: the model provider moved to Groq's free tier (so vision inputs fall back), and the Kirti parser merge did not happen (the app's own parsers in `src/lib/ingest` are what ships).
+
 Now → 22:30 IST build freeze. 22:30–23:59 is demo video + writeup (Kirti owns, Rehaan supports). Ordering from spec §8: **demo path end to end with the hero working before widening anything.** Every block leaves the app demoable.
 
 Demo path (spec §7): SMS paste → categorized + flagged → fix one category → rule → 14 rows re-categorize → Rulebook → Flow (invisible salary, scrubber, cone, goal marker) → NL scenario → diff → Ghost + regret number → mutual-fund refusal.

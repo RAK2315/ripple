@@ -2,6 +2,8 @@
 
 **See where your money is going, and where it ends up.**
 
+**Live: https://ripple-psi-gold.vercel.app** (add `?demo=1` to load the demo profile)
+
 A personal finance coach with a living money model, built for the Product Space Agentic AI Hackathon (PS04), 21 Nov 2026.
 
 RIPPLE is a money twin for Indian users. Paste your bank SMS alerts, drop a CSV, PDF or UPI screenshot, and it:

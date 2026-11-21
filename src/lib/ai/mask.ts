@@ -14,11 +14,23 @@ function looksLikePerson(s: string): boolean {
   return words.length >= 2 && words.length <= 3 && words.every((w) => /^[A-Za-z]{2,}$/.test(w));
 }
 
+/** Wallet/UPI P2P phrasing (Paytm, PhonePe exports). "Money sent to" is always a person; the others are when the payee reads like one. */
+const P2P_ALWAYS = /\b(Money sent to|Money transferred to)\s+([A-Za-z][A-Za-z.' ]{0,60}?)(?=\s*$|\s*[|,;]|\s+(?:via|on|ref|upi|using)\b)/gi;
+const P2P_MAYBE = /\b(Received from|Money received from|Sent to|Transferred to|Transfer to|Paid by)\s+([A-Za-z][A-Za-z.' ]{0,60}?)(?=\s*$|\s*[|,;]|\s+(?:via|on|ref|upi|using)\b)/gi;
+
+function looksLikeSingleName(s: string): boolean {
+  return /^[A-Za-z]{2,}$/.test(s.trim()) && !BUSINESS.test(s);
+}
+
 export function mask(text: string): string {
   let out = text;
   for (const n of KNOWN_NAMES) out = out.replace(new RegExp(`\\b${n}\\b`, "gi"), "[NAME]");
+  out = out.replace(P2P_ALWAYS, (_m, lead: string) => `${lead} [NAME]`);
+  out = out.replace(P2P_MAYBE, (m, lead: string, who: string) => (looksLikePerson(who) || looksLikeSingleName(who) ? `${lead} [NAME]` : m));
   // phone numbers (Indian mobiles), including as UPI VPA local part
   out = out.replace(/(\+91[\s-]?)?\b[6-9]\d{9}\b/g, "[PHONE]");
+  // UPI IDs / VPAs (ananya.rao@okicici, ******3014@ptaxi): the handle identifies a person, so only the provider survives
+  out = out.replace(/(?<![\w[\]])[A-Za-z0-9._*-]+@([A-Za-z][A-Za-z0-9.-]{1,30})\b/g, "[UPI-ID]@$1");
   // long digit runs: account numbers, card numbers, UPI refs → keep last 4
   out = out.replace(/\b\d{9,18}\b/g, (m) => `XX${m.slice(-4)}`);
   // card numbers with X padding: 4591XXXXXXXX7719 → XX7719

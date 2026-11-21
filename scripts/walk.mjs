@@ -97,6 +97,31 @@ if (process.env.ONLY !== "core") {
   await page.getByText("What the AI sees").click();
   await page.waitForTimeout(500);
   await shot("15-ai-sees");
+  // Excel: Paytm passbook (auto-detected) and an unreadable header (mapping UI)
+  await page.keyboard.press("Escape");
+  await page.goto(`${base}/import`);
+  await page.getByRole("button", { name: "CSV / Excel", exact: true }).click();
+  await page.locator('input[type="file"]').setInputFiles("src/lib/ingest/__fixtures__/paytm-sample.xlsx");
+  await page.getByText("Read from sheet").waitFor({ timeout: 60000 });
+  await page.waitForFunction(() => !document.body.innerText.includes("Categorizing"), null, { timeout: 120000 });
+  await shot("16-excel");
+  const mainText = await page.locator("main").innerText();
+  console.log("excel:", mainText.includes("Read from sheet") ? mainText.split(String.fromCharCode(10)).filter((l) => /Read from|could not be parsed|duplicates/.test(l)).join(" / ") : "no summary");
+  await page.locator('input[type="file"]').setInputFiles("src/lib/ingest/__fixtures__/unmapped-sample.xlsx");
+  await page.getByTestId("excel-mapping").waitFor({ timeout: 30000 });
+  const selects = page.getByTestId("excel-mapping").locator("select");
+  await selects.nth(1).selectOption({ label: "When" });
+  await selects.nth(2).selectOption({ label: "What" });
+  await selects.nth(4).selectOption({ label: "How much" });
+  await shot("17-excel-mapping");
+  await page.getByRole("button", { name: "Import with this mapping" }).click();
+  await page.getByText("columns mapped by you").waitFor({ timeout: 30000 });
+  console.log("excel mapping: imported");
+  await page.getByText("What the AI sees").click();
+  await page.waitForTimeout(500);
+  const seen = await page.locator("pre").allInnerTexts();
+  const all = seen.join(" ");
+  console.log("ai sees masked name:", all.includes("Money sent to [NAME]"), "| leaks Karan:", all.includes("Karan"), "| leaks 3014:", all.includes("3014"));
   // later blocks append here
 }
 console.log("errors:", errors.length ? errors.join("\n") : "none");

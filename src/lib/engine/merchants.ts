@@ -80,9 +80,13 @@ function titleCase(s: string): string {
 }
 
 /** Deterministic merchant normalizer. The LLM may improve names later; this never fails. */
+/** Wallet exports (Paytm, PhonePe) prefix the payee with a verb; the merchant is what follows. */
+export const WALLET_PREFIX = /^\s*(?:Paid to|Payment to|Money sent to|Money transferred to|Sent to|Transfer(?:red)? to|Received from|Money received from|Paid by)\s+/i;
+
 export function normalizeMerchant(raw: string): string {
   const starter = starterMatch(raw);
   if (starter) return starter.name;
+  if (WALLET_PREFIX.test(raw)) return titleCase(raw.replace(WALLET_PREFIX, "").trim().slice(0, 40));
   const u = raw.toUpperCase().trim();
   let m: RegExpMatchArray | null;
   if ((m = u.match(/^UPI(?:-AUTOPAY)?\/([^/]+)\//))) return cleanPayee(m[1]);

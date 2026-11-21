@@ -1,21 +1,13 @@
 import { z } from "zod";
 import { CATEGORIES } from "../../../../contract/types";
 import type { Category, LlmCategory } from "@/lib/types";
-import { mask } from "@/lib/ai/mask";
+import { categorizeLines, type CategorizeItem } from "@/lib/ai/payloads";
 import { structured } from "@/lib/ai/model";
 import { heuristicCategory } from "@/lib/ai/heuristics";
 
 export const maxDuration = 120;
 
-interface Item {
-  key: string;
-  description: string;
-  direction: "debit" | "credit";
-  merchant: string;
-  amount_rupees: number;
-  day: number;
-  count: number;
-}
+type Item = CategorizeItem;
 
 const schema = z.object({
   results: z.array(
@@ -37,7 +29,7 @@ export async function POST(req: Request) {
   let usedModel = false;
   for (let start = 0; start < items.length; start += 40) {
     const batch = items.slice(start, start + 40);
-    const lines = batch.map((it, i) => `${i}. [${it.direction}] ${mask(it.description)} | ~₹${it.amount_rupees} | day ${it.day} | seen ${it.count}x`).join("\n");
+    const lines = categorizeLines(batch);
     payloads.push(lines);
     const res = await structured({ model: "fast", system: SYSTEM, prompt: lines, schema });
     batch.forEach((it, i) => {

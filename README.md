@@ -49,7 +49,7 @@ RIPPLE keeps a running model of your money that you can correct, branch and ques
 
 **The Regret Engine.** Every piece of advice you did not take keeps its promised monthly saving, banked from the month after it was given at a plain savings rate. The ghost line is your balance plus that pot; the regret number is the gap today, and clicking it opens the payments that show the advice was not followed (the gym membership still charging every month, for example).
 
-**Indian inputs first.** Paste a dump of HDFC, ICICI, SBI or Axis SMS alerts (the demo has 361), upload a bank CSV, or a PDF statement. UPI handles, P2P transfers and POS strings are normalised into merchants. Duplicates across sources are reported, never silently merged.
+**Indian inputs first.** Paste a dump of HDFC, ICICI, SBI or Axis SMS alerts (the demo has 361), upload a bank CSV, an Excel export (`.xlsx`/`.xls`, including Paytm and PhonePe passbooks, read entirely in the browser), or a PDF statement. UPI handles, P2P transfers and POS strings are normalised into merchants. Duplicates across sources are reported, never silently merged.
 
 **The invisible salary.** One number, shown large: fixed costs plus subscriptions as a share of income, the part of your salary that is spent before it arrives (46% on the demo profile).
 
@@ -106,7 +106,7 @@ Stack: Next.js 16 (App Router) and TypeScript, Tailwind v4 with a single token f
 
 | # | Requirement | Where it lives |
 |---|---|---|
-| 1 | Ingest messy bank data, categorize automatically | Import screen; `src/lib/ingest/`, `src/lib/engine/categorize.ts`, `/api/categorize`, `/api/vision` |
+| 1 | Ingest messy bank data, categorize automatically | Import screen; `src/lib/ingest/` (SMS, CSV, Excel), `src/lib/engine/categorize.ts`, `/api/categorize`, `/api/vision` |
 | 2 | Correction loop that learns the rule | Review screen, rule modal, Rulebook; `/api/propose-rule`, `ruleMatches` in `categorize.ts` |
 | 3 | Recurring and subscription detection, alerts on change or non-use | Subscriptions & alerts; `src/lib/engine/recurring.ts`, `shifts.ts`, `/api/explain` |
 | 4 | Persistent financial profile | Goals & Profile; `src/lib/store.ts` (persisted), `src/lib/seed.ts` |

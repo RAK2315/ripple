@@ -8,11 +8,12 @@ import { ingestCsv, ingestSms } from "@/lib/ingest";
 import { categorizeUnmatched } from "@/lib/actions";
 import { callApi } from "@/lib/api";
 import { LOW_CONFIDENCE } from "@/lib/config";
+import { ExcelMapping, readExcel, type ExcelState } from "./excel-mapping";
 
 type Tab = "sms" | "csv" | "pdf" | "upi";
 const TABS: { id: Tab; label: string; hint: string }[] = [
   { id: "sms", label: "Bank SMS", hint: "Paste a dump of HDFC, ICICI, SBI or Axis alerts. Blank line between messages." },
-  { id: "csv", label: "CSV", hint: "Any bank export. We detect the date, amount and description columns, and debit/credit or signed amounts." },
+  { id: "csv", label: "CSV / Excel", hint: "Any bank or wallet export: .csv, .xlsx or .xls (Paytm and PhonePe passbooks included). We find the transaction sheet, the header row and the date, amount and description columns. Excel files are read in your browser and never uploaded." },
   { id: "pdf", label: "PDF", hint: "Statements with a text layer are read line by line (masked first). Scanned PDFs need a vision model, not enabled on this free-tier deployment." },
   { id: "upi", label: "UPI screenshot", hint: "A GPay or PhonePe history screen. Needs a vision model, not enabled on this free-tier deployment; use SMS or CSV instead." },
 ];
@@ -33,6 +34,7 @@ export function ImportScreen() {
   const [busy, setBusy] = useState<string | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [excel, setExcel] = useState<ExcelState | null>(null);
   const store = useStore();
   const d = useDerived();
 
@@ -57,6 +59,19 @@ export function ImportScreen() {
   }
 
   async function onFile(file: File) {
+    if (tab === "csv" && /\.xlsx?$/i.test(file.name)) {
+      return run(async () => {
+        setExcel(null);
+        setBusy("Reading spreadsheet in your browser…");
+        const st = await readExcel(file);
+        if (st.analysis.needsMapping) {
+          setExcel(st);
+          return;
+        }
+        const r = st.parse(st.analysis.map);
+        await finish(r, file.name, `sheet “${r.sheetName}”, header on row ${r.headerRow}`);
+      });
+    }
     if (tab === "csv") {
       return run(async () => {
         setBusy("Parsing CSV…");
@@ -146,7 +161,11 @@ export function ImportScreen() {
 
         {tab === "csv" && (
           <div className="flex items-center gap-4">
-            <FilePick accept=".csv,text/csv" onFile={onFile} disabled={!!busy} />
+            <FilePick
+              accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+              onFile={onFile}
+              disabled={!!busy}
+            />
             <button
               onClick={() =>
                 run(async () => {
@@ -160,6 +179,18 @@ export function ImportScreen() {
               Use demo statement.csv
             </button>
           </div>
+        )}
+        {tab === "csv" && excel && (
+          <ExcelMapping
+            state={excel}
+            onCancel={() => setExcel(null)}
+            onImport={(r) =>
+              run(async () => {
+                setExcel(null);
+                await finish(r, excel.fileName, `sheet “${r.sheetName}”, header on row ${r.headerRow}, columns mapped by you`);
+              })
+            }
+          />
         )}
         {tab === "pdf" && <FilePick accept="application/pdf" onFile={onFile} disabled={!!busy} />}
         {tab === "upi" && <FilePick accept="image/*" onFile={onFile} disabled={!!busy} />}
@@ -182,6 +213,7 @@ export function ImportScreen() {
             <Big label="Need review" value={review} tone="warn" />
           </div>
           {summary.viaLlm > 0 && <p className="mt-3 text-xs text-muted">{summary.viaLlm} rows read by the model{summary.path ? ` (${summary.path})` : ""}. Masked payload in “What the AI sees”.</p>}
+          {summary.viaLlm === 0 && summary.path && <p className="mt-3 text-xs text-muted">Read from {summary.path}. Parsed in your browser; nothing in the file was uploaded.</p>}
           {summary.unparsed.length > 0 && (
             <details className="mt-4 text-sm">
               <summary className="cursor-pointer text-warn">{summary.unparsed.length} inputs could not be parsed (never silently dropped)</summary>

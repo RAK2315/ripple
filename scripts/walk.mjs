@@ -55,6 +55,16 @@ if (process.env.ONLY !== "core") {
   await page.waitForTimeout(1200);
   await shot("9-ghost");
   console.log("regret:", await page.getByTestId("regret").innerText());
+  // B6: subscriptions, graveyard, changed alert, shift re-plan
+  await page.goto(`${base}/subscriptions`);
+  await page.getByTestId("graveyard").waitFor();
+  await page.waitForTimeout(4000); // explain line from the model
+  const shift = page.getByTestId("shift").first();
+  if (await shift.count()) await shift.getByRole("button", { name: "Re-plan" }).click();
+  await page.waitForTimeout(300);
+  await shot("10-subscriptions");
+  console.log("graveyard:", (await page.getByTestId("graveyard").innerText()).split(String.fromCharCode(10)).slice(0, 2).join(" "));
+  console.log("changed:", (await page.getByTestId("changed-alert").first().innerText()).replace(/\s+/g, " "));
   // later blocks append here
 }
 console.log("errors:", errors.length ? errors.join("\n") : "none");

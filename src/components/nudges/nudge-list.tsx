@@ -7,6 +7,7 @@ import { computeNudges } from "@/lib/engine/nudges";
 import { goalImpactDays } from "@/lib/engine/projection";
 import { dateLabel, monthLabelLong } from "@/lib/format";
 import { Money } from "@/components/money";
+import { useUi } from "@/lib/ui";
 
 function ordinal(d: string) {
   const n = +d.slice(8, 10);
@@ -41,7 +42,11 @@ export function NudgeList({ compact = false }: { compact?: boolean }) {
                 {n.drivers.map((t, i) => (
                   <span key={t.id}>
                     {i > 0 && (i === n.drivers.length - 1 ? " and " : ", ")}
-                    <button className="underline decoration-dotted underline-offset-4" title={`${t.merchant_normalized} · ${dateLabel(t.date)}`}>
+                    <button
+                      className="underline decoration-dotted underline-offset-4"
+                      title={`${t.merchant_normalized} · ${dateLabel(t.date)}`}
+                      onClick={() => useUi.getState().showProvenance(`${n.category} drivers this month`, n.drivers.map((x) => x.id))}
+                    >
                       {ordinal(t.date)}
                     </button>
                   </span>
@@ -50,9 +55,17 @@ export function NudgeList({ compact = false }: { compact?: boolean }) {
               </p>
               {n.goalName && n.goalFrom && (
                 <p className="mt-1 text-muted">
-                  If this continues, your {n.goalName.toLowerCase()} goal moves from <b className="text-ink">{monthLabelLong(n.goalFrom)}</b> to{" "}
-                  <b className="text-warn">{n.goalTo ? monthLabelLong(n.goalTo) : "out of reach"}</b>
-                  {days != null && <> (about {Math.round(days)} days per month at this pace)</>}.
+                  {n.goalTo === n.goalFrom ? (
+                    <>
+                      If this continues, it costs your {n.goalName.toLowerCase()} goal about <b className="text-warn">{Math.round(days ?? 0)} days</b> a month.
+                    </>
+                  ) : (
+                    <>
+                      If this continues, your {n.goalName.toLowerCase()} goal moves from <b className="text-ink">{monthLabelLong(n.goalFrom)}</b> to{" "}
+                      <b className="text-warn">{n.goalTo ? monthLabelLong(n.goalTo) : "out of reach"}</b>
+                      {days != null && <> (about {Math.round(days)} days per month at this pace)</>}.
+                    </>
+                  )}
                 </p>
               )}
             </div>

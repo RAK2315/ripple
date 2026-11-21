@@ -19,6 +19,8 @@ export interface Nudge {
   goalTo: string | null;
 }
 
+const MIN_EXTRA = 200000;
+
 /** Spec 3.6: mid-month, a category tracking >20% above its expected pace raises a nudge. Pure arithmetic. */
 export function computeNudges(
   txns: Transaction[],
@@ -40,9 +42,11 @@ export function computeNudges(
     const rows = txns.filter((t) => t.direction === "debit" && ym(t.date) === month && t.category === cat && !recIds.has(t.id));
     const spent = rows.reduce((a, t) => a + t.amount, 0);
     const expectedByNow = expectedFull * frac;
-    if (spent <= expectedByNow * 1.2 || spent < 50000) continue;
+    if (spent <= expectedByNow * 1.2 || spent < 50000 || rows.length < 2) continue;
     const projectedFull = Math.round(spent / frac);
     const extra = projectedFull - expectedFull;
+    // ignore drift that would cost less than ₹2,000 over the month: noise, not a nudge
+    if (extra < MIN_EXTRA) continue;
     const alt = project(base, [{ kind: "category_abs", category: cat, amount: extra }], goals, balance, today, 24);
     const g0 = mainProj.nearestGoal;
     const g1 = alt.goals.find((g) => g.goal.id === g0?.goal.id);

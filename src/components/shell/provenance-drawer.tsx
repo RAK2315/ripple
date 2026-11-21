@@ -2,11 +2,13 @@
 import { useDerived } from "@/lib/derived";
 import { useUi } from "@/lib/ui";
 import { dateLabel, formatINR } from "@/lib/format";
+import { goalImpactDays } from "@/lib/engine/projection";
 
 export function ProvenanceDrawer() {
   const p = useUi((s) => s.provenance);
   const close = useUi((s) => s.closeProvenance);
-  const { byId } = useDerived();
+  const { byId, main } = useDerived();
+  const goal = main.nearestGoal?.goal.name;
   if (!p) return null;
   const rows = p.ids.map((id) => byId.get(id)).filter((t) => !!t);
   const total = rows.reduce((a, t) => a + (t.direction === "debit" ? t.amount : -t.amount), 0);
@@ -40,6 +42,9 @@ export function ProvenanceDrawer() {
                 <span className="truncate font-mono">{t.raw_description}</span>
                 <span className="shrink-0">
                   {dateLabel(t.date)} · {t.category}
+                  {t.direction === "debit" && goal && (goalImpactDays(t.amount, main.plan.surplus) ?? 0) >= 0.5 && (
+                    <span title="Goal-impact lens: amount ÷ monthly surplus × 30 days"> · {goal} +{Math.round(goalImpactDays(t.amount, main.plan.surplus)!)}d</span>
+                  )}
                 </span>
               </div>
             </li>

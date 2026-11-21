@@ -16,6 +16,7 @@ const NAV = [
   { href: "/rules", label: "Rulebook" },
   { href: "/scenarios", label: "Scenarios" },
   { href: "/ghost", label: "Ghost" },
+  { href: "/subscriptions", label: "Subscriptions & alerts" },
   { href: "/goals", label: "Goals & Profile" },
   { href: "/report", label: "Monthly Review" },
 ];

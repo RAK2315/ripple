@@ -55,7 +55,7 @@ export function categorizeAll(
   return txns.map((t) => {
     const baseMerchant = normalizeMerchant(t.raw_description);
     const cached = llmCache[llmKey(t)];
-    const merchant = starterMatch(t.raw_description)?.name ?? cached?.merchant ?? baseMerchant;
+    const merchant = starterMatch(t.raw_description)?.name || cached?.merchant || baseMerchant;
     const out = (category: Category, source: Transaction["category_source"], confidence: number): Transaction => ({
       ...t,
       merchant_normalized: merchant,

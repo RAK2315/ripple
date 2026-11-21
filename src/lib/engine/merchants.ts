@@ -12,6 +12,8 @@ export const STARTER_MERCHANTS: Entry[] = [
     ["CHAAYOS", "Chaayos"], ["CHAI POINT", "Chai Point"], ["BARBEQUE NATION", "Barbeque Nation"], ["HALDIRAM", "Haldiram's"], ["SUBWAY", "Subway"],
     ["BEHROUZ", "Behrouz Biryani"], ["FAASOS", "Faasos"], ["EATSURE", "EatSure"], ["BOX8", "Box8"], ["THIRD WAVE", "Third Wave Coffee"],
     ["SOCIAL ", "Social"], ["VAISHALI", "Vaishali"], ["BLUE TOKAI", "Blue Tokai"], ["WOW MOMO", "Wow! Momo"], ["BIRYANI BY KILO", "Biryani By Kilo"],
+    // generic sweet shops: category only (empty name keeps the shop's own name)
+    [" HALWAI ", ""], ["SWEET MART", ""], [" SWEETS ", ""], ["MITHAI", ""],
   ]),
   ...E("Groceries", [
     ["BLINKIT", "Blinkit"], ["GROFERS", "Blinkit"], ["ZEPTO", "Zepto"], ["BIGBASKET", "BigBasket"], ["INNOVATIVE RETAIL", "BigBasket"],
@@ -85,7 +87,7 @@ export const WALLET_PREFIX = /^\s*(?:Paid to|Payment to|Money sent to|Money tran
 
 export function normalizeMerchant(raw: string): string {
   const starter = starterMatch(raw);
-  if (starter) return starter.name;
+  if (starter?.name) return starter.name;
   if (WALLET_PREFIX.test(raw)) return titleCase(raw.replace(WALLET_PREFIX, "").trim().slice(0, 40));
   const u = raw.toUpperCase().trim();
   let m: RegExpMatchArray | null;

@@ -50,6 +50,16 @@ export async function POST(req: Request) {
   const res = await structured({ model: "smart", system: SYSTEM, prompt, schema, timeoutMs: 30000 });
   let assumptions: RawAssumption[] = res?.assumptions ?? [];
   let usedModel = !!res && assumptions.length > 0;
+  if (usedModel) {
+    // numbers the user literally said ("a third", "6000") are read by our code, not the model:
+    // the model's rounding of "a third" (33 vs 33.3) must never move a projection
+    const literal = regexScenario(text, recurring, today);
+    assumptions = assumptions.map((a) => {
+      const l = literal.find((x) => x.kind === a.kind && x.category && x.category === a.category);
+      if (!l) return a;
+      return a.kind === "category_pct" ? { ...a, pct: l.pct ?? a.pct } : a.kind === "category_abs" || a.kind === "category_set" ? { ...a, amount_rupees: l.amount_rupees ?? a.amount_rupees } : a;
+    });
+  }
   if (!usedModel) {
     assumptions = regexScenario(text, recurring, today);
     usedModel = false;

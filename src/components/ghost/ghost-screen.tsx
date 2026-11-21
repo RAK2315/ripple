@@ -10,6 +10,9 @@ import { project } from "@/lib/engine/projection";
 import { ym } from "@/lib/engine/dates";
 import { formatINR, formatINRShort, monthLabel, monthLabelLong } from "@/lib/format";
 import { useUi } from "@/lib/ui";
+import { PageHeader } from "@/components/shell/shell";
+import { CountUp } from "@/components/money";
+import { AXIS_TICK } from "@/components/flow/timeline";
 
 export function GhostScreen() {
   const s = useStore();
@@ -31,7 +34,7 @@ export function GhostScreen() {
     return (
       <div className="card mx-auto mt-16 max-w-xl p-10 text-center">
         <h1 className="text-xl font-semibold">The ghost needs your history.</h1>
-        <Link href="/import" className="mt-5 inline-block rounded-lg bg-ink px-5 py-2.5 text-sm text-white">
+        <Link href="/import" className="mt-5 inline-block rounded-lg bg-ink px-5 py-3 text-sm text-paper">
           Import transactions
         </Link>
       </div>
@@ -49,24 +52,22 @@ export function GhostScreen() {
     })
     .filter((x) => x.ghost && x.real !== x.ghost);
   const today = ym(APP_TODAY);
+  const last = rows[rows.length - 1];
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Ghost</h1>
-        <p className="text-sm text-muted">The version of you that took the advice. Every figure here is arithmetic on your transactions and the advice dates.</p>
-      </div>
+      <PageHeader title="Ghost" sub="The version of you that took the advice. Every figure here is arithmetic on your transactions and the advice dates." />
 
       <div className="card overflow-hidden">
         <div className="grid grid-cols-[1.3fr_1fr]">
           <div className="p-8">
             <div className="text-xs uppercase tracking-wide text-ghost">Regret number</div>
             <button
-              className="num mt-2 block text-6xl font-semibold tracking-tight text-ghost underline decoration-ghost/30 decoration-dotted underline-offset-8"
+              className="figure-hero mt-3 block text-ghost underline decoration-ghost/30 decoration-dotted decoration-1 underline-offset-[10px]"
               onClick={() => show("Payments made after the advice was given", allEvidence, `${open.length} pieces of advice not taken. Pot = each monthly saving banked after the month it was given, at ${GHOST_ANNUAL_RATE * 100}% a year.`)}
               data-testid="regret"
             >
-              {formatINR(ghost.regret)}
+              <CountUp value={ghost.regret} format={(v) => formatINR(v)} />
             </button>
             <p className="mt-3 max-w-md text-base">
               The version of you that acted on {open.length} piece{open.length === 1 ? "" : "s"} of advice has <b className="num">{formatINR(ghost.regret)}</b> more than you
@@ -76,7 +77,7 @@ export function GhostScreen() {
               The gap grows by <span className="num font-medium text-ink">{formatINR(ghost.monthlyGap)}</span> every month you wait.
             </p>
           </div>
-          <div className="flex flex-col justify-center gap-3 bg-ghost-soft/60 p-8">
+          <div className="flex flex-col justify-center gap-4 border-l border-line bg-ghost-soft p-8">
             {goalLine.length ? (
               goalLine.map((g) => (
                 <div key={g.name}>
@@ -96,23 +97,57 @@ export function GhostScreen() {
       </div>
 
       <div className="card p-6">
-        <h2 className="text-lg font-semibold">You and your ghost</h2>
+        <h2>You and your ghost</h2>
         <p className="text-xs text-muted">Solid = past, dashed = projected. Shaded = the gap.</p>
         <div style={{ height: 320 }} className="mt-2">
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={rows} margin={{ top: 16, right: 16, bottom: 0, left: 8 }}>
-              <CartesianGrid stroke="#e4e1d8" vertical={false} />
-              <XAxis dataKey="month" tickFormatter={monthLabel} tick={{ fontSize: 11, fill: "#6b6e80" }} interval={2} />
-              <YAxis tickFormatter={(v) => formatINRShort(v)} tick={{ fontSize: 11, fill: "#6b6e80" }} width={56} />
+            <ComposedChart data={rows} margin={{ top: 16, right: 120, bottom: 0, left: 8 }}>
+              <CartesianGrid stroke="var(--border)" strokeOpacity={0.7} vertical={false} />
+              <XAxis dataKey="month" tickFormatter={monthLabel} tick={AXIS_TICK} interval={2} stroke="var(--border)" tickLine={false} />
+              <YAxis tickFormatter={(v) => formatINRShort(v)} tick={AXIS_TICK} width={56} axisLine={false} tickLine={false} />
               <Tooltip
+                wrapperClassName="chart-tooltip"
+                contentStyle={{ background: "transparent", border: "none" }}
                 labelFormatter={(l) => monthLabel(String(l))}
                 formatter={(v, name) => (Array.isArray(v) ? [formatINR(v[1] - v[0]), "Gap"] : [formatINR(Number(v)), name === "ghost" ? "Ghost-you" : "You"])}
               />
-              <Area dataKey="gap" stroke="none" fill="#7c3aed" fillOpacity={0.12} isAnimationActive={false} />
-              <Line dataKey={(r: { future: boolean; real: number }) => (r.future ? null : r.real)} name="real" stroke="#16182b" strokeWidth={2.5} dot={false} isAnimationActive={false} />
-              <Line dataKey={(r: { future: boolean; real: number; month: string }) => (r.future || r.month === today ? r.real : null)} name="real" stroke="#16182b" strokeWidth={2} strokeDasharray="6 3" dot={false} isAnimationActive={false} />
-              <Line dataKey="ghost" stroke="#7c3aed" strokeWidth={2.5} dot={false} isAnimationActive={false} />
-              <ReferenceLine x={today} stroke="#6b6e80" strokeDasharray="2 3" label={{ value: "today", position: "top", fontSize: 11, fill: "#6b6e80" }} />
+              <Area dataKey="gap" stroke="none" fill="var(--projection)" fillOpacity={0.08} isAnimationActive={false} />
+              <Line dataKey={(r: { future: boolean; real: number }) => (r.future ? null : r.real)} name="real" stroke="var(--text)" strokeWidth={2} dot={false} isAnimationActive={false} />
+              <Line dataKey={(r: { future: boolean; real: number; month: string }) => (r.future || r.month === today ? r.real : null)} name="real" stroke="var(--text)" strokeWidth={2} strokeDasharray="6 3" dot={false} isAnimationActive={false} />
+              <Line
+                dataKey="ghost"
+                stroke="var(--projection)"
+                strokeWidth={1.5}
+                strokeDasharray="5 4"
+                dot={false}
+                isAnimationActive={false}
+                style={{ filter: "drop-shadow(0 0 4px color-mix(in oklab, var(--projection) 55%, transparent))" }}
+              />
+              <ReferenceLine x={today} stroke="var(--text-faint)" strokeDasharray="2 3" label={{ value: "today", position: "top", fontSize: 11, fill: "var(--text-faint)" }} />
+              {last && (
+                <ReferenceLine
+                  segment={[
+                    { x: last.month, y: last.real },
+                    { x: last.month, y: last.ghost },
+                  ]}
+                  shape={(p: { x1?: number; y1?: number; x2?: number; y2?: number }) =>
+                    p.x1 == null || p.y1 == null || p.y2 == null ? (
+                      <g />
+                    ) : (
+                      <g>
+                        <path d={`M${p.x1 + 6},${p.y1} h6 V${p.y2} h-6`} fill="none" stroke="var(--projection)" strokeWidth={1} />
+                        <line x1={p.x1 + 12} x2={p.x1 + 22} y1={(p.y1 + p.y2) / 2} y2={(p.y1 + p.y2) / 2} stroke="var(--projection)" strokeWidth={1} />
+                        <text x={p.x1 + 26} y={(p.y1 + p.y2) / 2} dy="-0.2em" fontSize={13} fill="var(--projection)" fontFamily="var(--font-mono)">
+                          {formatINR(last.ghost - last.real)}
+                        </text>
+                        <text x={p.x1 + 26} y={(p.y1 + p.y2) / 2} dy="1.1em" fontSize={11} fill="var(--text-muted)" fontFamily="var(--font-sans)">
+                          gap by {monthLabel(last.month)}
+                        </text>
+                      </g>
+                    )
+                  }
+                />
+              )}
             </ComposedChart>
           </ResponsiveContainer>
         </div>
@@ -120,7 +155,7 @@ export function GhostScreen() {
 
       <div className="card divide-y divide-line">
         <div className="px-6 py-4">
-          <h2 className="text-lg font-semibold">Advice not taken</h2>
+          <h2>Advice not taken</h2>
           <p className="text-xs text-muted">Accepting moves it out of the regret number from today. The rupee amounts come from our arithmetic on your data, never from the model.</p>
         </div>
         {open.length === 0 && <div className="px-6 py-6 text-sm text-muted">Nothing outstanding. Your ghost is you.</div>}
@@ -129,7 +164,7 @@ export function GhostScreen() {
             <div className="text-xs text-muted">{i.advice.date_given}</div>
             <div>
               <div className="text-sm">{i.advice.text}</div>
-              <div className="mt-0.5 text-xs text-muted">
+              <div className="mt-1 text-xs text-muted">
                 {formatINR(i.advice.projected_monthly_saving)}/month · ignored for {i.months} month{i.months === 1 ? "" : "s"}
                 {i.evidenceIds.length > 0 && (
                   <>
@@ -141,13 +176,13 @@ export function GhostScreen() {
                 )}
               </div>
             </div>
-            <div className="num text-right text-lg font-semibold text-ghost">{formatINR(i.amount)}</div>
+            <div className="num text-right text-base font-medium text-ghost">{formatINR(i.amount)}</div>
             <button
               onClick={() => {
                 s.acceptAdvice(i.advice.id, APP_TODAY);
                 useUi.getState().showToast(`Accepted. ${formatINR(i.advice.projected_monthly_saving)}/month leaves the gap from today.`);
               }}
-              className="rounded-lg border border-ghost/40 px-3 py-1.5 text-sm text-ghost hover:bg-ghost-soft"
+              className="rounded-lg border border-ghost/40 px-3 py-2 text-sm text-ghost hover:bg-ghost-soft"
             >
               Accept
             </button>

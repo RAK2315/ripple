@@ -13,7 +13,7 @@ export function ProvenanceDrawer() {
   const rows = p.ids.map((id) => byId.get(id)).filter((t) => !!t);
   const total = rows.reduce((a, t) => a + (t.direction === "debit" ? t.amount : -t.amount), 0);
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-ink/20" onClick={close}>
+    <div className="fixed inset-0 z-40 flex justify-end bg-[var(--scrim)]" onClick={close}>
       <div className="h-full w-[460px] overflow-y-auto bg-card p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -30,7 +30,7 @@ export function ProvenanceDrawer() {
         </div>
         <ul className="mt-3 divide-y divide-line">
           {rows.map((t) => (
-            <li key={t.id} className="py-2.5">
+            <li key={t.id} className="py-3">
               <div className="flex justify-between gap-3 text-sm">
                 <span className="font-medium">{t.merchant_normalized}</span>
                 <span className={`num ${t.direction === "credit" ? "text-accent" : ""}`}>
@@ -38,7 +38,7 @@ export function ProvenanceDrawer() {
                   {formatINR(t.amount)}
                 </span>
               </div>
-              <div className="mt-0.5 flex justify-between gap-3 text-xs text-muted">
+              <div className="mt-1 flex justify-between gap-3 text-xs text-muted">
                 <span className="truncate font-mono">{t.raw_description}</span>
                 <span className="shrink-0">
                   {dateLabel(t.date)} · {t.category}

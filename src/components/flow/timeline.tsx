@@ -28,6 +28,25 @@ export function buildTimeline(history: { month: string; balance: number }[], pro
   return rows;
 }
 
+export const AXIS_TICK = { fontSize: 11, fill: "var(--text-faint)", fontFamily: "var(--font-mono)" };
+
+/** Goal marker drawn as a translated group so it glides (spring-ish, no bounce) when a scenario moves it. */
+function GoalMarker({ x1, y1, y2, label, onTrack }: { x1?: number; y1?: number; y2?: number; label: string; onTrack: boolean }) {
+  if (x1 == null || y1 == null || y2 == null) return null;
+  const c = onTrack ? "var(--inflow)" : "var(--warning)";
+  const top = Math.min(y1, y2);
+  const bottom = Math.max(y1, y2);
+  return (
+    <g className="goal-marker" style={{ transform: `translateX(${x1}px)` }}>
+      <line x1={0} x2={0} y1={top} y2={bottom} stroke={c} strokeDasharray="2 3" strokeWidth={1} />
+      <circle cx={0} cy={top - 8} r={3} fill={c} />
+      <text x={6} y={top - 8} dy="0.35em" fontSize={11} fontWeight={600} fill={c} fontFamily="var(--font-sans)">
+        {label}
+      </text>
+    </g>
+  );
+}
+
 export function Timeline({
   rows,
   proj,
@@ -45,10 +64,17 @@ export function Timeline({
     <div style={{ height }} className="w-full">
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={rows} margin={{ top: 24, right: 16, bottom: 0, left: 8 }}>
-          <CartesianGrid stroke="#e4e1d8" vertical={false} />
-          <XAxis dataKey="month" tickFormatter={monthLabel} tick={{ fontSize: 11, fill: "#6b6e80" }} interval={2} />
-          <YAxis tickFormatter={(v) => formatINRShort(v)} tick={{ fontSize: 11, fill: "#6b6e80" }} width={56} />
+          <defs>
+            <filter id="cone-soft" x="-5%" y="-20%" width="110%" height="140%">
+              <feGaussianBlur stdDeviation="3" />
+            </filter>
+          </defs>
+          <CartesianGrid stroke="var(--border)" strokeOpacity={0.7} vertical={false} />
+          <XAxis dataKey="month" tickFormatter={monthLabel} tick={AXIS_TICK} interval={2} stroke="var(--border)" tickLine={false} />
+          <YAxis tickFormatter={(v) => formatINRShort(v)} tick={AXIS_TICK} width={56} axisLine={false} tickLine={false} />
           <Tooltip
+            wrapperClassName="chart-tooltip"
+            contentStyle={{ background: "transparent", border: "none" }}
             labelFormatter={(l) => monthLabel(String(l))}
             formatter={(v, name) => {
               if (Array.isArray(v)) return [`${formatINR(v[0])} – ${formatINR(v[1])}`, "Range"];
@@ -56,22 +82,22 @@ export function Timeline({
               return [formatINR(Number(v)), label];
             }}
           />
-          <Area dataKey="band" stroke="none" fill="#0f766e" fillOpacity={0.13} isAnimationActive={false} />
-          {compareLabel && <Line dataKey="compare" stroke="#94a3b8" strokeDasharray="4 4" dot={false} strokeWidth={1.5} isAnimationActive={false} />}
-          <Line dataKey="actual" stroke="#16182b" strokeWidth={2.5} dot={false} isAnimationActive={false} />
-          <Line dataKey="likely" stroke="#0f766e" strokeWidth={2.5} strokeDasharray="6 3" dot={false} isAnimationActive={false} />
+          {/* uncertainty cone: projection colour at 6%, soft edges, no border */}
+          <Area dataKey="band" stroke="none" fill="var(--projection)" fillOpacity={0.06} isAnimationActive={false} style={{ filter: "url(#cone-soft)" }} />
+          <Area dataKey="band" stroke="none" fill="var(--projection)" fillOpacity={0.06} isAnimationActive={false} />
+          {compareLabel && <Line dataKey="compare" stroke="var(--text-faint)" strokeDasharray="4 4" dot={false} strokeWidth={1.5} isAnimationActive={false} />}
+          <Line dataKey="actual" stroke="var(--text)" strokeWidth={2} dot={false} isAnimationActive={false} />
+          <Line dataKey="likely" stroke="var(--projection)" strokeWidth={2} strokeDasharray="6 3" dot={false} isAnimationActive={false} />
           {proj.goals
             .filter((g) => g.projected)
             .map((g) => (
               <ReferenceLine
                 key={g.goal.id}
                 x={g.projected!}
-                stroke={g.onTrack ? "#15803d" : "#b45309"}
-                strokeDasharray="2 3"
-                label={{ value: `${g.goal.name} ●`, position: "top", fontSize: 11, fill: g.onTrack ? "#15803d" : "#b45309", fontWeight: 600 }}
+                shape={(p: { x1?: number; y1?: number; y2?: number }) => <GoalMarker {...p} label={g.goal.name} onTrack={g.onTrack} />}
               />
             ))}
-          {selected && <ReferenceLine x={selected} stroke="#16182b" strokeWidth={1.5} />}
+          {selected && <ReferenceLine x={selected} stroke="var(--text)" strokeWidth={1} strokeOpacity={0.6} />}
         </ComposedChart>
       </ResponsiveContainer>
     </div>

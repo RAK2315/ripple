@@ -1,61 +1,317 @@
 @import "tailwindcss";
 
+/* ---------------------------------------------------------------------------
+   RIPPLE design tokens. Every colour in the product comes from here.
+   Light is the default (warm paper); dark is opt-in via [data-theme="dark"].
+--------------------------------------------------------------------------- */
 :root {
-  --paper: #f6f4ef;
-  --card: #ffffff;
-  --ink: #16182b;
-  --muted: #6b6e80;
-  --line: #e4e1d8;
-  --accent: #0f766e;
-  --accent-soft: #d5ece9;
-  --warn: #b45309;
-  --warn-soft: #fdf0dc;
-  --danger: #b42318;
-  --danger-soft: #fde7e4;
-  --ghost: #7c3aed;
-  --ghost-soft: #ede5fd;
+  --bg: #f4f2ed;
+  --surface: #fbfaf7;
+  --surface-raised: #ffffff;
+  --border: #e0dcd3;
+  --border-strong: #cbc5b9;
+  --text: #1c1b18;
+  --text-muted: #6b6760;
+  --text-faint: #9a958c;
+
+  --inflow: #2f6b4f;
+  --outflow: #a8462a;
+  --projection: #4b4f8f;
+  --warning: #9a6b1f;
+
+  --shadow: 0 1px 2px color-mix(in srgb, #5a4a2e 6%, transparent), 0 8px 24px -8px color-mix(in srgb, #5a4a2e 14%, transparent);
+  --scrim: color-mix(in srgb, var(--text) 18%, transparent);
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #1a1917;
+  --surface: #211f1d;
+  --surface-raised: #272521;
+  --border: #33302c;
+  --border-strong: #46423c;
+  --text: #f2f0eb;
+  --text-muted: #a39e95;
+  --text-faint: #756f66;
+
+  --inflow: #4e9b77;
+  --outflow: #c96a45;
+  --projection: #7c80c4;
+  --warning: #c99a3e;
+
+  --shadow: 0 1px 2px color-mix(in srgb, #000 30%, transparent), 0 8px 24px -8px color-mix(in srgb, #000 45%, transparent);
+  --scrim: color-mix(in srgb, #0d0c0b 55%, transparent);
+  color-scheme: dark;
 }
 
 @theme inline {
-  --color-paper: var(--paper);
-  --color-card: var(--card);
-  --color-ink: var(--ink);
-  --color-muted: var(--muted);
-  --color-line: var(--line);
-  --color-accent: var(--accent);
-  --color-accent-soft: var(--accent-soft);
-  --color-warn: var(--warn);
-  --color-warn-soft: var(--warn-soft);
-  --color-danger: var(--danger);
-  --color-danger-soft: var(--danger-soft);
-  --color-ghost: var(--ghost);
-  --color-ghost-soft: var(--ghost-soft);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* no Tailwind default palette: only our tokens exist */
+  --color-*: initial;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+
+  --color-paper: var(--bg);
+  --color-card: var(--surface);
+  --color-raised: var(--surface-raised);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-ink: var(--text);
+  --color-muted: var(--text-muted);
+  --color-faint: var(--text-faint);
+
+  --color-accent: var(--inflow);
+  --color-accent-soft: color-mix(in oklab, var(--inflow) 13%, var(--surface));
+  --color-danger: var(--outflow);
+  --color-danger-soft: color-mix(in oklab, var(--outflow) 12%, var(--surface));
+  --color-warn: var(--warning);
+  --color-warn-soft: color-mix(in oklab, var(--warning) 13%, var(--surface));
+  --color-ghost: var(--projection);
+  --color-ghost-soft: color-mix(in oklab, var(--projection) 12%, var(--surface));
+
+  --font-display: var(--font-instrument-serif), "Iowan Old Style", Georgia, serif;
+  --font-sans: var(--font-instrument-sans), "Helvetica Neue", Arial, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, Menlo, monospace;
+
+  /* one radius (6px), cards get 10px via .card */
+  --radius-sm: 6px;
+  --radius-md: 6px;
+  --radius-lg: 6px;
+  --radius-xl: 10px;
+  --radius-2xl: 10px;
+
+  /* one shadow */
+  --shadow-sm: var(--shadow);
+  --shadow-md: var(--shadow);
+  --shadow-lg: var(--shadow);
+  --shadow-xl: var(--shadow);
+  --shadow-2xl: var(--shadow);
+
+  --tracking-wide: 0.08em;
+  --tracking-tight: -0.01em;
+}
+
+/* ---------------------------------------------------------------------------
+   Base type. Unlayered rules beat Tailwind utilities, which keeps every screen consistent.
+--------------------------------------------------------------------------- */
+html {
+  background: var(--bg);
 }
 
 body {
-  background: var(--paper);
-  color: var(--ink);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  transition: background-color 200ms ease, color 200ms ease;
 }
 
-.num {
+/* page title: Instrument Serif 32px */
+main h1 {
+  font-family: var(--font-display);
+  font-size: 32px;
+  line-height: 1.15;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+/* section headings: Instrument Sans 15px / 600 */
+main h2,
+main h3 {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+/* labels: 12px uppercase, 0.08em */
+.uppercase {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+/* every figure in tables, lists and rows: Plex Mono, tabular so digits never jitter */
+.num,
+main td,
+.font-mono {
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+}
+/* mono inside prose: optically matched to the sans, never synthesized bold */
+.num {
+  font-size: 0.93em;
+}
+.num.font-semibold,
+.num.font-bold,
+b .num,
+b.num,
+strong .num {
+  font-weight: 500;
+}
+main td .num,
+main td.num {
+  font-size: 13px;
+}
+main td:first-child,
+main td.text-label {
+  font-family: var(--font-sans);
+}
+
+/* hero figures: Instrument Serif 64px */
+.figure-hero {
+  font-family: var(--font-display);
+  font-size: 64px;
+  line-height: 1;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* mid-size figures in stat tiles keep the serif voice */
+.figure {
+  font-family: var(--font-display);
+  font-size: 28px;
+  line-height: 1.1;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.figure-sm {
+  font-size: 22px;
+}
+
+.chart-tooltip {
+  background: var(--surface-raised) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 6px !important;
+  box-shadow: var(--shadow);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
 }
 
 .card {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+/* dense tables: 36px rows, hairline separators, no zebra */
+main table {
+  border-collapse: collapse;
+}
+main table tr {
+  height: 36px;
+}
+main table td,
+main table th {
+  font-size: 13px;
+}
+main table th {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+input,
+select,
+textarea {
+  background-color: var(--surface-raised);
+  color: var(--text);
+  border-color: var(--border);
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-faint);
+}
+
+/* visible, styled focus everywhere */
+:focus-visible {
+  outline: 2px solid var(--projection);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline-offset: 0;
+  border-color: var(--projection);
+}
+
+::selection {
+  background: color-mix(in oklab, var(--projection) 22%, transparent);
+}
+
+/* skeletons, not spinners */
+.skeleton {
+  background: linear-gradient(90deg, var(--border) 0%, color-mix(in oklab, var(--border) 45%, var(--surface)) 50%, var(--border) 100%);
+  background-size: 200% 100%;
+  animation: skeleton 1.4s ease-in-out infinite;
+  border-radius: 6px;
+}
+@keyframes skeleton {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+/* the flow diagram breathes: slow dash drift on each stroke */
+.flow-link {
+  stroke-dasharray: 2 14;
+  stroke-linecap: round;
+  animation: flow-drift 6s linear infinite;
+  transition: stroke-opacity 200ms ease-out, opacity 200ms ease-out;
+}
+.flow-link.leak {
+  stroke-dasharray: 3 4 10 4 2 5;
+  animation-duration: 9s;
+}
+@keyframes flow-drift {
+  to {
+    stroke-dashoffset: -64;
+  }
+}
+
+/* goal markers glide (spring-ish, settles without bounce) */
+.goal-marker {
+  transition: transform 380ms cubic-bezier(0.2, 1.1, 0.3, 1);
+}
+
+.fade-in {
+  animation: fade-in 300ms ease-out both;
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flow-link,
+  .skeleton {
+    animation: none;
+  }
+  .goal-marker,
+  .fade-in {
+    transition: none;
+    animation: none;
+  }
 }
 
 @media print {
   .no-print {
     display: none !important;
   }
+  html,
   body {
-    background: white;
+    background: var(--surface);
   }
   main {
     max-width: none !important;

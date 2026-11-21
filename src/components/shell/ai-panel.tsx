@@ -8,7 +8,7 @@ export function AiPanel() {
   const log = useStore((s) => s.aiLog);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-ink/20" onClick={() => setOpen(false)}>
+    <div className="fixed inset-0 z-40 flex justify-end bg-[var(--scrim)]" onClick={() => setOpen(false)}>
       <div className="h-full w-[560px] overflow-y-auto bg-card p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between">
           <div>

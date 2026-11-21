@@ -64,7 +64,7 @@ export function ReportScreen() {
     return (
       <div className="card mx-auto mt-16 max-w-xl p-10 text-center">
         <h1 className="text-xl font-semibold">Your monthly review appears after your first import.</h1>
-        <Link href="/import" className="mt-5 inline-block rounded-lg bg-ink px-5 py-2.5 text-sm text-white">
+        <Link href="/import" className="mt-5 inline-block rounded-lg bg-ink px-5 py-3 text-sm text-paper">
           Import transactions
         </Link>
       </div>
@@ -82,23 +82,23 @@ export function ReportScreen() {
           <h1 className="text-3xl font-semibold">{monthLabelLong(r.month)}</h1>
         </div>
         <div className="no-print flex gap-2">
-          <select value={m} onChange={(e) => setMonth(e.target.value)} className="rounded-lg border border-line bg-card px-3 py-1.5 text-sm">
+          <select value={m} onChange={(e) => setMonth(e.target.value)} className="rounded-lg border border-line bg-card px-3 py-2 text-sm">
             {months.map((x) => (
               <option key={x} value={x}>
                 {monthLabelLong(x)}
               </option>
             ))}
           </select>
-          <button onClick={() => window.print()} className="rounded-lg bg-ink px-4 py-1.5 text-sm text-white">
+          <button onClick={() => window.print()} className="rounded-lg bg-ink px-4 py-2 text-sm text-paper">
             Print / save PDF
           </button>
         </div>
       </div>
 
       <div className="grid grid-cols-3 gap-4">
-        <Stat label="Money in" value={<Money paise={r.income} ids={r.incomeIds} title={`Credits, ${monthLabelLong(r.month)}`} />} />
-        <Stat label="Money out" value={<Money paise={r.spend} ids={r.spendIds} title={`Debits, ${monthLabelLong(r.month)}`} />} />
-        <Stat label="Net" value={<span className={r.net >= 0 ? "text-accent" : "text-danger"}>{formatINR(r.net, { sign: true })}</span>} />
+        <Stat label="Money in" value={<Money paise={r.income} ids={r.incomeIds} title={`Credits, ${monthLabelLong(r.month)}`} className="figure" />} />
+        <Stat label="Money out" value={<Money paise={r.spend} ids={r.spendIds} title={`Debits, ${monthLabelLong(r.month)}`} className="figure" />} />
+        <Stat label="Net" value={<span className={`figure ${r.net >= 0 ? "text-accent" : "text-danger"}`}>{formatINR(r.net, { sign: true })}</span>} />
       </div>
 
       <div className="card p-6" data-testid="narrative">
@@ -112,7 +112,14 @@ export function ReportScreen() {
             <div className="mt-3 text-[10px] text-muted">{story.source === "model" ? "Words by the model, every figure by RIPPLE's arithmetic" : "Template narrative (model unavailable)"}</div>
           </>
         ) : (
-          <div className="text-sm text-muted">Writing the narrative around your numbers…</div>
+          <div className="space-y-3" aria-busy="true">
+            <span className="sr-only">Writing the narrative around your numbers…</span>
+            <div className="skeleton h-4 w-full" />
+            <div className="skeleton h-4 w-11/12" />
+            <div className="skeleton h-4 w-3/4" />
+            <div className="skeleton mt-6 h-4 w-full" />
+            <div className="skeleton h-4 w-2/3" />
+          </div>
         )}
       </div>
 
@@ -125,7 +132,7 @@ export function ReportScreen() {
                 <span className="truncate">{c.category}</span>
                 <div className="relative h-3">
                   <div className="absolute inset-y-0 left-0 rounded bg-line" style={{ width: `${(c.prev / maxCat) * 100}%` }} />
-                  <div className="absolute inset-y-0.5 left-0 rounded bg-ink" style={{ width: `${(c.amount / maxCat) * 100}%` }} />
+                  <div className="absolute inset-y-1 left-0 rounded bg-ink" style={{ width: `${(c.amount / maxCat) * 100}%` }} />
                 </div>
                 <Money paise={c.amount} ids={c.ids} title={`${c.category}, ${monthLabelLong(r.month)}`} className="text-right" />
                 <span className={`num text-right text-xs ${c.delta > 0 ? "text-danger" : c.delta < 0 ? "text-accent" : "text-muted"}`}>
@@ -187,7 +194,7 @@ function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="card p-5">
       <div className="text-xs text-muted">{label}</div>
-      <div className="mt-1 text-2xl font-semibold">{value}</div>
+      <div className="mt-2">{value}</div>
     </div>
   );
 }

@@ -53,10 +53,10 @@ export function ReviewScreen() {
           <p className="text-sm text-muted">Low-confidence rows are pinned to the top. Fix one, and RIPPLE proposes a rule for all of them.</p>
         </div>
         <div className="flex items-center gap-2">
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search" className="rounded-lg border border-line bg-card px-3 py-1.5 text-sm" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search" className="rounded-lg border border-line bg-card px-3 py-2 text-sm" />
           <div className="flex rounded-lg bg-card p-1 text-sm">
             {(["review", "all"] as const).map((f) => (
-              <button key={f} onClick={() => setFilter(f)} className={`rounded-md px-3 py-1 ${filter === f ? "bg-ink text-white" : "text-muted"}`}>
+              <button key={f} onClick={() => setFilter(f)} className={`rounded-md px-3 py-1 ${filter === f ? "bg-ink text-paper" : "text-muted"}`}>
                 {f === "review" ? "Needs review" : "All"}
               </button>
             ))}
@@ -70,7 +70,7 @@ export function ReviewScreen() {
           const low = (t.confidence ?? 0) < LOW_CONFIDENCE && t.category_source !== "user";
           const days = t.direction === "debit" ? goalImpactDays(t.amount, surplus) : null;
           return (
-            <div key={t.id} className={`grid grid-cols-[70px_1fr_120px_190px] items-center gap-4 px-5 py-2.5 ${low ? "bg-warn-soft/50" : ""}`}>
+            <div key={t.id} className={`grid grid-cols-[70px_1fr_120px_190px] items-center gap-4 px-5 py-2 ${low ? "bg-warn-soft/50" : ""}`}>
               <div className="text-xs text-muted">{dateLabel(t.date)}</div>
               <div className="min-w-0">
                 <div className="truncate text-sm font-medium">{t.merchant_normalized}</div>
@@ -98,7 +98,7 @@ export function ReviewScreen() {
                     <option key={c}>{c}</option>
                   ))}
                 </select>
-                <div className="mt-0.5 flex items-center gap-2 text-[10px] text-muted">
+                <div className="mt-1 flex items-center gap-2 text-[10px] text-muted">
                   <span>
                     {SOURCE_LABEL[t.category_source ?? "llm"]}
                     {t.category_source !== "user" && t.category_source !== "rule" ? ` · ${Math.round((t.confidence ?? 0) * 100)}%` : ""}

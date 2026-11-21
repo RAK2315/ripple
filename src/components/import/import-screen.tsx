@@ -90,7 +90,7 @@ export function ImportScreen() {
               setSummary(null);
             }
           }}
-          className="rounded-lg border border-line px-3 py-1.5 text-xs text-muted hover:text-ink"
+          className="rounded-lg border border-line px-3 py-2 text-xs text-muted hover:text-ink"
         >
           Reset demo
         </button>
@@ -130,7 +130,7 @@ export function ImportScreen() {
                     await finish(await ingestSms(text), "sms-paste");
                   })
                 }
-                className="rounded-lg bg-ink px-5 py-2 text-sm text-white disabled:opacity-40"
+                className="rounded-lg bg-ink px-5 py-2 text-sm text-paper disabled:opacity-40"
               >
                 Parse messages
               </button>
@@ -164,7 +164,12 @@ export function ImportScreen() {
         {tab === "pdf" && <FilePick accept="application/pdf" onFile={onFile} disabled={!!busy} />}
         {tab === "upi" && <FilePick accept="image/*" onFile={onFile} disabled={!!busy} />}
 
-        {busy && <div className="mt-4 animate-pulse text-sm text-accent">{busy}</div>}
+        {busy && (
+          <div className="mt-4 flex items-center gap-3" aria-busy="true">
+            <div className="skeleton h-2 w-24" />
+            <div className="text-sm text-muted">{busy}</div>
+          </div>
+        )}
         {error && <div className="mt-4 rounded-lg bg-danger-soft p-3 text-sm text-danger">{error}</div>}
       </div>
 
@@ -190,7 +195,7 @@ export function ImportScreen() {
             </details>
           )}
           <div className="mt-5 flex gap-3">
-            <Link href="/review" className="rounded-lg bg-ink px-5 py-2 text-sm text-white">
+            <Link href="/review" className="rounded-lg bg-ink px-5 py-2 text-sm text-paper">
               Review {review} uncertain
             </Link>
             <Link href="/" className="rounded-lg border border-line px-5 py-2 text-sm">
@@ -207,7 +212,7 @@ function Big({ label, value, sub, tone }: { label: string; value: number; sub?: 
   return (
     <div>
       <div className="text-xs text-muted">{label}</div>
-      <div className={`num text-3xl font-semibold ${tone === "accent" ? "text-accent" : tone === "warn" ? "text-warn" : ""}`}>{value}</div>
+      <div className={`figure ${tone === "accent" ? "text-accent" : tone === "warn" ? "text-warn" : ""}`}>{value}</div>
       {sub && <div className="text-xs text-muted">{sub}</div>}
     </div>
   );
@@ -215,7 +220,7 @@ function Big({ label, value, sub, tone }: { label: string; value: number; sub?: 
 
 function FilePick({ accept, onFile, disabled }: { accept: string; onFile: (f: File) => void; disabled: boolean }) {
   return (
-    <label className={`inline-flex cursor-pointer items-center rounded-lg bg-ink px-5 py-2 text-sm text-white ${disabled ? "opacity-40" : ""}`}>
+    <label className={`inline-flex cursor-pointer items-center rounded-lg bg-ink px-5 py-2 text-sm text-paper ${disabled ? "opacity-40" : ""}`}>
       Choose file
       <input type="file" accept={accept} className="hidden" disabled={disabled} onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
     </label>

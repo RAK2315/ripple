@@ -69,7 +69,7 @@ export function NudgeList({ compact = false }: { compact?: boolean }) {
                 </p>
               )}
             </div>
-            <button onClick={() => ack(n.id)} className="shrink-0 rounded-lg border border-line px-3 py-1.5 text-xs text-muted hover:text-ink">
+            <button onClick={() => ack(n.id)} className="shrink-0 rounded-lg border border-line px-3 py-2 text-xs text-muted hover:text-ink">
               Got it
             </button>
           </div>

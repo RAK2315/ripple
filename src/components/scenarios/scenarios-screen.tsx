@@ -44,7 +44,7 @@ export function ScenariosScreen() {
       <div className="card mx-auto mt-16 max-w-xl p-10 text-center">
         <h1 className="text-xl font-semibold">Scenarios branch from your real data.</h1>
         <p className="mt-2 text-muted">Import transactions first, then ask “what if”.</p>
-        <Link href="/import" className="mt-5 inline-block rounded-lg bg-ink px-5 py-2.5 text-sm text-white">
+        <Link href="/import" className="mt-5 inline-block rounded-lg bg-ink px-5 py-3 text-sm text-paper">
           Import transactions
         </Link>
       </div>
@@ -108,7 +108,7 @@ export function ScenariosScreen() {
             className="flex-1 rounded-lg border border-line px-4 py-3 text-base"
             aria-label="What if sentence"
           />
-          <button disabled={busy} className="rounded-lg bg-ink px-5 text-sm text-white disabled:opacity-50">
+          <button disabled={busy} className="rounded-lg bg-ink px-5 text-sm text-paper disabled:opacity-50">
             {busy ? "Reading…" : "Build scenario"}
           </button>
         </form>
@@ -136,12 +136,12 @@ export function ScenariosScreen() {
                 value={draft.name}
                 onChange={(e) => setDraft({ ...draft, name: e.target.value })}
                 placeholder="Scenario name"
-                className="rounded-md border border-line bg-white px-2 py-1 text-sm font-medium"
+                className="rounded-md border border-line bg-raised px-2 py-1 text-sm font-medium"
                 aria-label="Scenario name"
               />
               <label className="flex items-center gap-1 text-xs text-muted">
                 branches from
-                <select value={draft.parent_id} onChange={(e) => setDraft({ ...draft, parent_id: e.target.value })} className="rounded-md border border-line bg-white px-2 py-1 text-sm">
+                <select value={draft.parent_id} onChange={(e) => setDraft({ ...draft, parent_id: e.target.value })} className="rounded-md border border-line bg-raised px-2 py-1 text-sm">
                   {s.scenarios.map((x) => (
                     <option key={x.id} value={x.id}>
                       {x.name}
@@ -168,7 +168,7 @@ export function ScenariosScreen() {
                 <button onClick={() => setDraft(null)} className="rounded-lg border border-line px-4 py-2 text-sm">
                   Discard
                 </button>
-                <button onClick={run} disabled={!draft.assumptions.length} className="rounded-lg bg-accent px-4 py-2 text-sm text-white disabled:opacity-40">
+                <button onClick={run} disabled={!draft.assumptions.length} className="rounded-lg bg-accent px-4 py-2 text-sm text-paper disabled:opacity-40">
                   Run scenario
                 </button>
               </div>
@@ -318,13 +318,13 @@ function ScenarioTree({ scenarios, active, onSelect, onDelete }: { scenarios: Sc
   const render = (sc: Scenario, depth: number): React.ReactNode => (
     <div key={sc.id}>
       <div
-        className={`group flex items-center gap-2 rounded-md px-2 py-1.5 text-sm ${active === sc.id ? "bg-ink text-white" : "hover:bg-paper"}`}
+        className={`group flex items-center gap-2 rounded-md px-2 py-2 text-sm ${active === sc.id ? "bg-ink text-paper" : "hover:bg-paper"}`}
         style={{ marginLeft: depth * 14 }}
       >
         {depth > 0 && <span className="text-muted">└</span>}
         <button onClick={() => onSelect(sc.id)} className="flex-1 truncate text-left" title={sc.name}>
           {sc.name}
-          {!sc.is_main && <span className={`ml-1 text-[11px] ${active === sc.id ? "text-white/60" : "text-muted"}`}>({sc.assumptions.length})</span>}
+          {!sc.is_main && <span className={`ml-1 text-[11px] ${active === sc.id ? "text-paper/60" : "text-muted"}`}>({sc.assumptions.length})</span>}
         </button>
         {!sc.is_main && (
           <button onClick={() => onDelete(sc.id)} className="hidden text-xs opacity-60 hover:opacity-100 group-hover:block" aria-label={`Delete ${sc.name}`}>
@@ -337,5 +337,5 @@ function ScenarioTree({ scenarios, active, onSelect, onDelete }: { scenarios: Sc
   );
   // orphans (parent deleted) render at root under main
   const roots = scenarios.filter((x) => x.parent_id === null || !scenarios.some((p) => p.id === x.parent_id));
-  return <div className="space-y-0.5">{roots.map((r) => render(r, r.is_main ? 0 : 1))}</div>;
+  return <div className="space-y-1">{roots.map((r) => render(r, r.is_main ? 0 : 1))}</div>;
 }

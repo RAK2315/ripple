@@ -6,7 +6,7 @@ import { formatINR, monthLabelLong, uid } from "@/lib/format";
 import { Money } from "@/components/money";
 import type { Goal } from "@/lib/types";
 
-const input = "rounded-md border border-line bg-white px-2 py-1.5 text-sm";
+const input = "rounded-md border border-line bg-raised px-2 py-2 text-sm";
 const toR = (p: number) => Math.round(p / 100);
 const toP = (v: string) => Math.round((+v || 0) * 100);
 
@@ -82,7 +82,7 @@ export function GoalsScreen() {
           </p>
           <div className="mt-3 divide-y divide-line text-sm">
             {detectedFixed.map((r) => (
-              <div key={r.id} className="flex justify-between py-1.5">
+              <div key={r.id} className="flex justify-between py-2">
                 <span>
                   {r.merchant_normalized} <span className="text-xs text-muted">· {r.category} · detected</span>
                 </span>
@@ -90,7 +90,7 @@ export function GoalsScreen() {
               </div>
             ))}
             {manual.map((f) => (
-              <div key={f.id} className="flex items-center gap-2 py-1.5">
+              <div key={f.id} className="flex items-center gap-2 py-2">
                 <input className={`${input} flex-1`} value={f.name} onChange={(e) => s.setFixedCosts(s.fixedCosts.map((x) => (x.id === f.id ? { ...x, name: e.target.value } : x)))} />
                 <input
                   type="number"

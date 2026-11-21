@@ -36,7 +36,7 @@ export function blankAssumption(kind: Assumption["kind"], goals: Goal[], recurri
   }
 }
 
-const input = "rounded-md border border-line bg-white px-2 py-1 text-sm";
+const input = "rounded-md border border-line bg-raised px-2 py-1 text-sm";
 
 /** Editable fields for one assumption. Money is edited in rupees, stored in paise. */
 export function AssumptionEditor({

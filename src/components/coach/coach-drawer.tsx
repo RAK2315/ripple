@@ -68,7 +68,7 @@ export function CoachDrawer() {
   }
 
   return (
-    <div className="no-print fixed inset-0 z-40 flex justify-end bg-ink/20" onClick={() => setOpen(false)}>
+    <div className="no-print fixed inset-0 z-40 flex justify-end bg-[var(--scrim)]" onClick={() => setOpen(false)}>
       <div className="flex h-full w-[520px] flex-col bg-card shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between border-b border-line p-5">
           <div>
@@ -92,7 +92,7 @@ export function CoachDrawer() {
           )}
           {turns.map((t, i) => (
             <div key={i} className="space-y-2" data-testid="coach-turn">
-              <div className="ml-auto w-fit max-w-[85%] rounded-xl bg-ink px-3 py-2 text-sm text-white">{t.q}</div>
+              <div className="ml-auto w-fit max-w-[85%] rounded-xl bg-ink px-3 py-2 text-sm text-paper">{t.q}</div>
               {t.refused && (
                 <div className="text-xs font-medium uppercase tracking-wide text-danger" data-testid="refusal">
                   Outside what RIPPLE does · logged
@@ -105,7 +105,7 @@ export function CoachDrawer() {
                   <div className="mt-1">
                     {t.plan.goal}: {formatINR(t.plan.target)} by {monthLabelLong(ym(t.plan.date))} ({t.plan.months} months)
                   </div>
-                  <div className="num mt-2 text-2xl font-semibold">
+                  <div className="figure mt-2">
                     {formatINR(t.plan.plain)}
                     <span className="text-sm font-normal text-muted">/month, saving alone</span>
                   </div>
@@ -125,7 +125,14 @@ export function CoachDrawer() {
               <div className="text-[10px] text-muted">{t.source === "model" ? "Words by the model, figures by RIPPLE" : "Template answer (model unavailable)"}</div>
             </div>
           ))}
-          {busy && <div className="text-sm text-muted">Thinking…</div>}
+          {busy && (
+            <div className="space-y-2" aria-busy="true">
+              <span className="sr-only">Thinking…</span>
+              <div className="skeleton h-4 w-11/12" />
+              <div className="skeleton h-4 w-4/5" />
+              <div className="skeleton h-4 w-2/3" />
+            </div>
+          )}
         </div>
         <form
           className="flex gap-2 border-t border-line p-4"
@@ -135,7 +142,7 @@ export function CoachDrawer() {
           }}
         >
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ask about your money…" className="flex-1 rounded-lg border border-line px-3 py-2 text-sm" aria-label="Ask the coach" />
-          <button disabled={busy} className="rounded-lg bg-ink px-4 text-sm text-white disabled:opacity-50">
+          <button disabled={busy} className="rounded-lg bg-ink px-4 text-sm text-paper disabled:opacity-50">
             Ask
           </button>
         </form>

@@ -42,7 +42,7 @@ export function RuleModal({
   const preview = useMemo(() => (rule ? previewRule(rule, categorized) : null), [rule, categorized]);
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-ink/30" onClick={onClose}>
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-[var(--scrim)]" onClick={onClose}>
       <div className="card w-[640px] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="text-xs uppercase tracking-wide text-accent">Learned rule {usedModel ? "· proposed by the model" : "· proposed by heuristic"}</div>
         <h3 className="mt-1 text-lg font-semibold">You fixed one row. Should RIPPLE learn this?</h3>
@@ -50,33 +50,39 @@ export function RuleModal({
           From: <span className="font-mono text-xs">{source.raw_description}</span>
         </p>
 
-        {!p && <div className="mt-6 animate-pulse text-sm text-accent">Asking the model for a general rule…</div>}
+        {!p && (
+          <div className="mt-6 space-y-3" aria-busy="true">
+            <div className="text-sm text-muted">Asking the model for a general rule…</div>
+            <div className="skeleton h-12 w-full" />
+            <div className="skeleton h-8 w-2/3" />
+          </div>
+        )}
         {p && rule && preview && (
           <>
             <div className="mt-5 rounded-xl bg-accent-soft p-4 text-[15px] font-medium leading-snug text-ink">{ruleToEnglish(rule)}</div>
             {p.rationale && <p className="mt-2 text-xs text-muted">{p.rationale}</p>}
 
             <div className="mt-4 grid grid-cols-[1fr_2fr_1fr] gap-2 text-sm">
-              <select value={p.type} onChange={(e) => setEdit({ ...p, type: e.target.value as RuleType })} className="rounded-lg border border-line px-2 py-1.5">
+              <select value={p.type} onChange={(e) => setEdit({ ...p, type: e.target.value as RuleType })} className="rounded-lg border border-line px-2 py-2">
                 <option value="contains">contains</option>
                 <option value="merchant_equals">merchant equals</option>
                 <option value="amount_range">amount range + text</option>
                 <option value="recurring_date">recurring on date</option>
               </select>
-              <input value={p.pattern} onChange={(e) => setEdit({ ...p, pattern: e.target.value.toUpperCase() })} className="rounded-lg border border-line px-2 py-1.5 font-mono" />
-              <select value={cat} onChange={(e) => setCat(e.target.value as Category)} className="rounded-lg border border-line px-2 py-1.5">
+              <input value={p.pattern} onChange={(e) => setEdit({ ...p, pattern: e.target.value.toUpperCase() })} className="rounded-lg border border-line px-2 py-2 font-mono" />
+              <select value={cat} onChange={(e) => setCat(e.target.value as Category)} className="rounded-lg border border-line px-2 py-2">
                 {CATEGORIES.map((c) => (
                   <option key={c}>{c}</option>
                 ))}
               </select>
               {p.type === "amount_range" && (
                 <div className="col-span-3 flex gap-2">
-                  <input type="number" placeholder="min ₹" value={p.amount_min != null ? p.amount_min / 100 : ""} onChange={(e) => setEdit({ ...p, amount_min: +e.target.value * 100 })} className="w-32 rounded-lg border border-line px-2 py-1.5" />
-                  <input type="number" placeholder="max ₹" value={p.amount_max != null ? p.amount_max / 100 : ""} onChange={(e) => setEdit({ ...p, amount_max: +e.target.value * 100 })} className="w-32 rounded-lg border border-line px-2 py-1.5" />
+                  <input type="number" placeholder="min ₹" value={p.amount_min != null ? p.amount_min / 100 : ""} onChange={(e) => setEdit({ ...p, amount_min: +e.target.value * 100 })} className="w-32 rounded-lg border border-line px-2 py-2" />
+                  <input type="number" placeholder="max ₹" value={p.amount_max != null ? p.amount_max / 100 : ""} onChange={(e) => setEdit({ ...p, amount_max: +e.target.value * 100 })} className="w-32 rounded-lg border border-line px-2 py-2" />
                 </div>
               )}
               {p.type === "recurring_date" && (
-                <input type="number" placeholder="day of month" value={p.day_of_month ?? ""} onChange={(e) => setEdit({ ...p, day_of_month: +e.target.value })} className="col-span-3 w-40 rounded-lg border border-line px-2 py-1.5" />
+                <input type="number" placeholder="day of month" value={p.day_of_month ?? ""} onChange={(e) => setEdit({ ...p, day_of_month: +e.target.value })} className="col-span-3 w-40 rounded-lg border border-line px-2 py-2" />
               )}
             </div>
 
@@ -91,7 +97,7 @@ export function RuleModal({
             </div>
             <ul className="mt-2 max-h-36 overflow-y-auto rounded-lg bg-paper p-2 text-xs">
               {preview.matched.slice(0, 20).map((t) => (
-                <li key={t.id} className="flex justify-between gap-2 py-0.5">
+                <li key={t.id} className="flex justify-between gap-2 py-1">
                   <span className="truncate font-mono text-muted">{t.raw_description}</span>
                   <span className="num shrink-0">
                     {dateLabel(t.date)} · {formatINR(t.amount)} · <span className={t.category !== cat ? "text-warn" : "text-accent"}>{t.category}</span>
@@ -112,7 +118,7 @@ export function RuleModal({
                   toast(`Rule learned. ${preview.changed.length} past transaction${preview.changed.length === 1 ? "" : "s"} now ${cat}.`);
                   onClose();
                 }}
-                className="rounded-lg bg-ink px-4 py-2 text-sm text-white disabled:opacity-40"
+                className="rounded-lg bg-ink px-4 py-2 text-sm text-paper disabled:opacity-40"
               >
                 Learn rule & apply to history
               </button>

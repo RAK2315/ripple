@@ -54,7 +54,7 @@ export function SubscriptionsScreen() {
     return (
       <div className="card mx-auto mt-16 max-w-xl p-10 text-center">
         <h1 className="text-xl font-semibold">Recurring payments are detected from your history.</h1>
-        <Link href="/import" className="mt-5 inline-block rounded-lg bg-ink px-5 py-2.5 text-sm text-white">
+        <Link href="/import" className="mt-5 inline-block rounded-lg bg-ink px-5 py-3 text-sm text-paper">
           Import transactions
         </Link>
       </div>
@@ -85,7 +85,7 @@ export function SubscriptionsScreen() {
               ids={unused.flatMap((r) => r.transaction_ids)}
               title="Unused subscriptions, all charges"
               note="Yearly total = monthly amount × 12 for each subscription marked or inferred unused."
-              className="mt-1 block text-5xl font-semibold tracking-tight text-danger"
+              className="figure-hero mt-2 block text-danger"
             />
             <div className="mt-1 text-sm text-muted">a year on things you don&apos;t use</div>
           </div>
@@ -120,7 +120,7 @@ export function SubscriptionsScreen() {
                 <Money paise={r.amount} ids={r.transaction_ids} title={`${r.merchant_normalized} charges`} className="font-semibold" /> on {dateLabel(r.changed_on ?? "")}.{" "}
                 <span className="text-muted">That is {formatINR((r.amount - (r.previous_amount ?? 0)) * 12)} more a year.</span>
               </div>
-              <div className="mt-1 text-sm text-muted">{s.recurringNotes[r.id] ?? "…"}</div>
+              {s.recurringNotes[r.id] ? <div className="mt-1 text-sm text-muted">{s.recurringNotes[r.id]}</div> : <div className="skeleton mt-2 h-4 w-3/4" aria-busy="true" />}
             </div>
           ))}
           {fresh.map((r) => (
@@ -166,7 +166,7 @@ export function SubscriptionsScreen() {
                     {days != null && d.main.nearestGoal ? `${d.main.nearestGoal.goal.name} +${days < 10 ? days.toFixed(1) : Math.round(days)}d/mo` : "—"}
                   </td>
                   <td className="py-2 pl-6">
-                    <span className={`rounded-full px-2 py-0.5 text-xs ${STATUS_STYLE[r.status]}`}>{r.status}</span>
+                    <span className={`rounded-full px-2 py-1 text-xs ${STATUS_STYLE[r.status]}`}>{r.status}</span>
                   </td>
                   <td className="px-6 py-2 text-right">
                     <button
@@ -218,11 +218,11 @@ function ShiftCard({ shift }: { shift: Shift }) {
         </div>
         <div className="flex shrink-0 gap-2">
           {!open ? (
-            <button onClick={() => setOpen(true)} className="rounded-lg bg-ink px-3 py-1.5 text-xs text-white">
+            <button onClick={() => setOpen(true)} className="rounded-lg bg-ink px-3 py-2 text-xs text-paper">
               Re-plan
             </button>
           ) : (
-            <button onClick={() => s.ackNudge(shift.id)} className="rounded-lg border border-line px-3 py-1.5 text-xs">
+            <button onClick={() => s.ackNudge(shift.id)} className="rounded-lg border border-line px-3 py-2 text-xs">
               Done
             </button>
           )}

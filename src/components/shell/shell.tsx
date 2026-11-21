@@ -7,6 +7,7 @@ import { useUi } from "@/lib/ui";
 import { ProvenanceDrawer } from "./provenance-drawer";
 import { AiPanel } from "./ai-panel";
 import { CoachDrawer } from "@/components/coach/coach-drawer";
+import { ThemeToggle } from "./theme-toggle";
 import { useEffect } from "react";
 import { categorizeUnmatched } from "@/lib/actions";
 
@@ -36,47 +37,66 @@ export function Shell({ children }: { children: React.ReactNode }) {
       categorizeUnmatched();
     }
   }, [hydrated]);
+  // Escape closes any open drawer
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const ui = useUi.getState();
+      ui.closeProvenance();
+      ui.setAiPanel(false);
+      ui.setCoach(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   return (
     <div className="flex min-h-screen">
-      <aside className="no-print sticky top-0 flex h-screen w-56 shrink-0 flex-col border-r border-line bg-card px-4 py-6">
-        <Link href="/" className="mb-8 block">
-          <div className="text-2xl font-semibold tracking-tight">
-            RIPPLE<span className="text-accent">.</span>
+      <aside className="no-print sticky top-0 flex h-screen w-60 shrink-0 flex-col border-r border-line bg-card px-4 py-6">
+        <Link href="/" className="mb-8 block px-2">
+          <div className="font-display text-[30px] leading-none tracking-tight">
+            Ripple<span className="text-accent">.</span>
           </div>
-          <div className="mt-1 text-[11px] leading-snug text-muted">See where your money is going, and where it ends up.</div>
+          <div className="mt-2 text-xs leading-snug text-muted">See where your money is going, and where it ends up.</div>
         </Link>
-        <nav className="flex flex-col gap-0.5">
+        <nav className="flex flex-col gap-1" aria-label="Main">
           {NAV.map((n) => {
             const on = n.href === "/" ? path === "/" : path.startsWith(n.href);
             return (
               <Link
                 key={n.href}
                 href={n.href}
-                className={`rounded-lg px-3 py-2 text-sm transition ${on ? "bg-ink text-white" : "text-ink/80 hover:bg-paper"}`}
+                aria-current={on ? "page" : undefined}
+                className={`relative rounded-md px-3 py-2 text-sm transition-colors ${
+                  on ? "bg-paper font-medium text-ink" : "text-muted hover:bg-paper hover:text-ink"
+                }`}
               >
+                {on && <span className="absolute inset-y-2 left-0 w-[2px] rounded-full bg-accent" aria-hidden />}
                 {n.label}
               </Link>
             );
           })}
         </nav>
-        <button
-          onClick={() => useUi.getState().setCoach(true)}
-          className="mt-auto mb-2 rounded-lg bg-accent px-3 py-2.5 text-left text-sm font-medium text-white hover:opacity-90"
-        >
-          Ask RIPPLE
-        </button>
-        <button
-          onClick={() => setAiPanel(true)}
-          className=" rounded-lg border border-line px-3 py-2 text-left text-xs text-muted hover:bg-paper"
-        >
-          <span className="font-medium text-ink">What the AI sees</span>
-          <br />
-          {aiCount} masked payload{aiCount === 1 ? "" : "s"} sent
-        </button>
+        <div className="mt-auto space-y-2">
+          <button
+            onClick={() => useUi.getState().setCoach(true)}
+            className="w-full rounded-md bg-ink px-3 py-3 text-left text-sm font-medium text-paper transition-opacity hover:opacity-90"
+          >
+            Ask RIPPLE
+          </button>
+          <button
+            onClick={() => setAiPanel(true)}
+            className="w-full rounded-md border border-line px-3 py-2 text-left text-xs text-muted transition-colors hover:border-line-strong hover:bg-paper"
+          >
+            <span className="font-medium text-ink">What the AI sees</span>
+            <br />
+            <span className="num text-xs">{aiCount}</span> masked payload{aiCount === 1 ? "" : "s"} sent
+          </button>
+          <ThemeToggle />
+        </div>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <main className="mx-auto w-full max-w-6xl flex-1 px-8 py-8">{hydrated ? children : <div className="text-muted">Loading…</div>}</main>
-        <footer className="no-print border-t border-line px-8 py-3 text-xs text-muted">
+        <main className="mx-auto w-full max-w-6xl flex-1 px-8 py-8">{hydrated ? children : <PageSkeleton />}</main>
+        <footer className="no-print border-t border-line px-8 py-3 text-xs text-faint">
           RIPPLE educates and models scenarios. It does not recommend specific securities, stocks, mutual funds or insurance products. Every rupee figure is
           computed by code, never by a language model.
         </footer>
@@ -86,11 +106,41 @@ export function Shell({ children }: { children: React.ReactNode }) {
       {hydrated && <CoachDrawer />}
       {toast && (
         <div
-          className={`fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl px-5 py-3 text-sm text-white shadow-lg ${toast.tone === "warn" ? "bg-warn" : "bg-ink"}`}
+          role="status"
+          className={`fade-in fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-md px-5 py-3 text-sm text-paper shadow-lg ${toast.tone === "warn" ? "bg-warn" : "bg-ink"}`}
         >
           {toast.text}
         </div>
       )}
+    </div>
+  );
+}
+
+/** One header for every screen: serif title + one muted line on what the screen is for. */
+export function PageHeader({ title, sub, eyebrow, right }: { title: string; sub?: React.ReactNode; eyebrow?: string; right?: React.ReactNode }) {
+  return (
+    <div className="flex items-end justify-between gap-6">
+      <div>
+        {eyebrow && <div className="mb-1 text-xs uppercase tracking-wide text-faint">{eyebrow}</div>}
+        <h1>{title}</h1>
+        {sub && <p className="mt-1 text-sm text-muted">{sub}</p>}
+      </div>
+      {right}
+    </div>
+  );
+}
+
+export function PageSkeleton() {
+  return (
+    <div className="space-y-6" aria-busy="true" aria-label="Loading">
+      <div className="skeleton h-9 w-64" />
+      <div className="skeleton h-4 w-96" />
+      <div className="grid grid-cols-3 gap-6">
+        <div className="skeleton h-36" />
+        <div className="skeleton h-36" />
+        <div className="skeleton h-36" />
+      </div>
+      <div className="skeleton h-96" />
     </div>
   );
 }

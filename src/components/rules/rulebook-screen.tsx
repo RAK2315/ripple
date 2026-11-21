@@ -44,7 +44,7 @@ export function RulebookScreen() {
               <div className="flex items-start justify-between gap-6">
                 <div className="flex-1">
                   <div className="text-[15px] font-medium">{ruleToEnglish(r)}</div>
-                  <div className="mt-1.5 text-xs text-muted">
+                  <div className="mt-2 text-xs text-muted">
                     Learned {new Date(r.created_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
                     {src && (
                       <>
@@ -56,15 +56,15 @@ export function RulebookScreen() {
                 </div>
                 <button
                   onClick={() => show(ruleToEnglish(r), matched.map((t) => t.id))}
-                  className="num shrink-0 rounded-lg bg-accent-soft px-3 py-1.5 text-sm font-medium text-accent"
+                  className="num shrink-0 rounded-lg bg-accent-soft px-3 py-2 text-sm font-medium text-accent"
                 >
                   {matched.length} matches
                 </button>
               </div>
               {editing === r.id && (
                 <div className="mt-3 flex gap-2 text-sm">
-                  <input value={r.pattern} onChange={(e) => update(r.id, { pattern: e.target.value.toUpperCase() })} className="flex-1 rounded-lg border border-line px-2 py-1.5 font-mono" />
-                  <select value={r.category} onChange={(e) => update(r.id, { category: e.target.value as Category })} className="rounded-lg border border-line px-2 py-1.5">
+                  <input value={r.pattern} onChange={(e) => update(r.id, { pattern: e.target.value.toUpperCase() })} className="flex-1 rounded-lg border border-line px-2 py-2 font-mono" />
+                  <select value={r.category} onChange={(e) => update(r.id, { category: e.target.value as Category })} className="rounded-lg border border-line px-2 py-2">
                     {CATEGORIES.map((c) => (
                       <option key={c}>{c}</option>
                     ))}

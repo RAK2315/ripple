@@ -70,7 +70,7 @@ export function Timeline({
             </filter>
           </defs>
           <CartesianGrid stroke="var(--border)" strokeOpacity={0.7} vertical={false} />
-          <XAxis dataKey="month" tickFormatter={monthLabel} tick={AXIS_TICK} interval={2} stroke="var(--border)" tickLine={false} />
+          <XAxis dataKey="month" tickFormatter={monthLabel} tick={AXIS_TICK} interval="preserveStartEnd" minTickGap={28} stroke="var(--border)" tickLine={false} />
           <YAxis tickFormatter={(v) => formatINRShort(v)} tick={AXIS_TICK} width={56} axisLine={false} tickLine={false} />
           <Tooltip
             wrapperClassName="chart-tooltip"

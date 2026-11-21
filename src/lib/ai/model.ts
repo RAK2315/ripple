@@ -1,17 +1,22 @@
 import { generateText, Output } from "ai";
-import { anthropic } from "@ai-sdk/anthropic";
+import { groq } from "@ai-sdk/groq";
 import type { z } from "zod";
 
+// Groq free tier. gpt-oss models support json_schema structured outputs.
 export const MODELS = {
-  fast: "claude-haiku-5-5",
-  smart: "claude-sonnet-5-5",
+  fast: "openai/gpt-oss-20b",
+  smart: "openai/gpt-oss-120b",
 } as const;
 
-export const hasKey = () => !!process.env.ANTHROPIC_API_KEY;
+export const hasKey = () => !!process.env.GROQ_API_KEY;
+
+/** No vision-capable model is available on this Groq key: image/scanned-PDF calls take the fallback path. */
+export const hasVision = () => false;
 
 /**
  * One structured model call. Returns null on any failure so callers fall back deterministically.
  * Callers must pass ALREADY MASKED text (see mask.ts).
+ * maxRetries uses the AI SDK's exponential backoff, which covers free-tier 429s.
  */
 export async function structured<T>(opts: {
   model: keyof typeof MODELS;
@@ -22,18 +27,16 @@ export async function structured<T>(opts: {
   timeoutMs?: number;
 }): Promise<T | null> {
   if (!hasKey()) return null;
+  if (opts.images?.length && !hasVision()) return null;
   try {
-    const content: Array<{ type: "text"; text: string } | { type: "file"; data: string; mediaType: string }> = [
-      ...(opts.images ?? []).map((i) => ({ type: "file" as const, data: i.data, mediaType: i.mediaType })),
-      { type: "text", text: opts.prompt },
-    ];
     const { output } = await generateText({
-      model: anthropic(MODELS[opts.model]),
+      model: groq(MODELS[opts.model]),
       system: opts.system,
-      messages: [{ role: "user", content }],
+      prompt: opts.prompt,
       output: Output.object({ schema: opts.schema }),
+      providerOptions: { groq: { structuredOutputs: true, strictJsonSchema: false, reasoningEffort: "low" } },
       abortSignal: AbortSignal.timeout(opts.timeoutMs ?? 45000),
-      maxRetries: 1,
+      maxRetries: 3,
     });
     return output as T;
   } catch (e) {

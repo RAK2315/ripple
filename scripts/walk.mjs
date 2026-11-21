@@ -3,7 +3,9 @@ import { chromium } from "playwright-core";
 const out = process.argv[2] ?? ".";
 const base = process.env.BASE ?? "http://localhost:3000";
 const browser = await chromium.launch({ executablePath: "C:/Program Files/Google/Chrome/Application/chrome.exe" });
-const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+// REC=<dir> records a video of the run (rough demo recording)
+const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, ...(process.env.REC ? { recordVideo: { dir: process.env.REC, size: { width: 1440, height: 900 } } } : {}) });
+const page = await context.newPage();
 const errors = [];
 page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
 page.on("pageerror", (e) => errors.push(String(e)));
@@ -47,7 +49,14 @@ await page.waitForTimeout(800);
 await shot("8-scenario-diff");
 console.log("diff:", (await page.getByTestId("diff-table").innerText()).replace(/\s+/g, " "));
 if (process.env.ONLY !== "core") {
+  // B5: ghost + regret number
+  await page.goto(`${base}/ghost`);
+  await page.getByTestId("regret").waitFor();
+  await page.waitForTimeout(1200);
+  await shot("9-ghost");
+  console.log("regret:", await page.getByTestId("regret").innerText());
   // later blocks append here
 }
 console.log("errors:", errors.length ? errors.join("\n") : "none");
+await context.close();
 await browser.close();

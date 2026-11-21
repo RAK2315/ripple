@@ -37,7 +37,7 @@ Update after each block.
 - [x] B2 projection + Flow (Sankey, cone, scrubber, invisible salary, provenance)
 - [x] B3 import (SMS/CSV/PDF/UPI), review + correction loop + rule proposal, rulebook
 - [x] B4 scenarios: NL → editable assumptions → run, branch tree with parents, diff vs any scenario, compare line on timeline
-- [ ] B5 Ghost + rough demo recording
+- [x] B5 Ghost: regret number (6% savings rate, provenance = payments since advice), ghost line + gap, ghost goal dates, accept; rough demo at ../demo-recordings/rough-demo-b5.webm (`REC=<dir> node scripts/walk.mjs`)
 - [ ] B6 subscriptions/graveyard, nudges, goal-impact, shifts + re-plan
 - [ ] B7 goals & profile, monthly review, coach guardrails
 - [ ] B8 privacy + PDF/UPI verification

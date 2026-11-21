@@ -5,3 +5,5 @@ export const STORE_KEY = "ripple-v1";
 export const PROJECTION_MONTHS = 24;
 /** Model guesses about a merchant RIPPLE has never seen confirmed are capped below LOW_CONFIDENCE: the AI suggests, you confirm once, a rule remembers. */
 export const LLM_UNCONFIRMED_CAP = 0.65;
+/** Regret Engine: the ghost parks each saving at a plain savings-account rate. Our arithmetic, shown on screen. */
+export const GHOST_ANNUAL_RATE = 0.06;

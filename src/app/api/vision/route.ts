@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { extractText, getDocumentProxy } from "unpdf";
 import { mask } from "@/lib/ai/mask";
-import { structured } from "@/lib/ai/model";
+import { hasVision, structured } from "@/lib/ai/model";
 
 export const maxDuration = 180;
 
@@ -36,13 +36,28 @@ export async function POST(req: Request) {
     if (usable) {
       path = "text-layer";
       masked = mask(text).slice(0, 60000);
-      res = await structured({ model: "smart", system: SYSTEM, prompt: `Statement text:\n${masked}`, schema, timeoutMs: 120000 });
+      // one call per ~15 rows, in parallel: a single long call drops rows
+      const starts = [...masked.matchAll(/\b\d{1,2}[/-](?:[A-Za-z]{3}|\d{1,2})[/-]\s*\d{2,4}/g)].map((m) => m.index!);
+      const header = masked.slice(0, starts[0] ?? 0).slice(0, 400);
+      const chunks: string[] = [];
+      for (let i = 0; i < starts.length; i += 15) chunks.push(masked.slice(starts[i], starts[i + 15] ?? masked.length));
+      const parts = await Promise.all(
+        (chunks.length ? chunks : [masked]).map((c) =>
+          structured({ model: "smart", system: SYSTEM, prompt: `Statement header:\n${header}\n\nRows:\n${c}`, schema, timeoutMs: 90000 }),
+        ),
+      );
+      const okParts = parts.filter((p) => p !== null);
+      res = okParts.length ? { rows: okParts.flatMap((p) => p.rows) } : null;
+      if (okParts.length < parts.length) path = `text-layer (${parts.length - okParts.length} of ${parts.length} chunks failed)`;
+    } else if (!hasVision()) {
+      return Response.json({ ok: false, error: "This PDF has no text layer (scanned). Reading scanned pages needs a vision model, which this deployment does not have. Paste the bank SMS or upload the CSV instead." });
     } else {
       path = "scanned → vision";
       masked = `[scanned PDF sent as page images: ${fileName}, ${Math.round((data.length * 0.75) / 1024)} KB — pixels cannot be text-masked]`;
       res = await structured({ model: "smart", system: SYSTEM, prompt: "List every transaction in this statement.", schema, images: [{ data, mediaType: "application/pdf" }], timeoutMs: 150000 });
     }
   } else {
+    if (!hasVision()) return Response.json({ ok: false, error: "Reading screenshots needs a vision model, which this deployment does not have (free-tier key). Paste the bank SMS or upload the CSV instead." });
     path = "vision";
     masked = `[image sent to vision model: ${fileName}, ${Math.round((data.length * 0.75) / 1024)} KB — pixels cannot be text-masked]`;
     res = await structured({ model: "smart", system: SYSTEM, prompt: "List every transaction visible in this screenshot.", schema, images: [{ data, mediaType }], timeoutMs: 120000 });

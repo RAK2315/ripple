@@ -40,6 +40,6 @@ Update after each block.
 - [x] B5 Ghost: regret number (6% savings rate, provenance = payments since advice), ghost line + gap, ghost goal dates, accept; rough demo at ../demo-recordings/rough-demo-b5.webm (`REC=<dir> node scripts/walk.mjs`)
 - [x] B6 /subscriptions: graveyard (yearly total, mark unused), changed/new alerts + /api/explain (digit-guarded, template fallback), shifts.ts + Re-plan, nudges (≥2 rows, ≥₹2k drift), goal-impact on review rows, nudges, recurring table, provenance drawer
 - [x] B7 /goals editor (income override, balance, emergency fund, manual fixed costs, goals reorder/add/delete), /report (computed review + /api/narrative + print), "Ask RIPPLE" coach drawer: securities regex + model flag → refusal + concept + computed monthly amount, refusal log. Model text uses {placeholders} filled by our code; any digit → template
-- [ ] B8 privacy + PDF/UPI verification
+- [x] B8 privacy: bare payee names masked, masked merchant never taken back from model, panel verified. PDF text layer chunked ~15 rows/call in parallel (55/55 rows, exact totals on public/demo/statement-oct.pdf). UPI + scanned PDF: no vision model on the Groq key → clear "use SMS/CSV" message
 - [ ] B9 deploy (needs user: Vercel login)
 - [ ] B10 re-record + polish

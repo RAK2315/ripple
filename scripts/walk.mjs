@@ -81,6 +81,22 @@ if (process.env.ONLY !== "core") {
   await page.waitForTimeout(500);
   await shot("13-refusal");
   console.log("coach:", (await page.getByTestId("coach-turn").first().innerText()).replace(/\s+/g, " "));
+  await page.keyboard.press("Escape");
+  await page.goto(`${base}/import`);
+  // B8: text-layer PDF (Oct statement overlaps the SMS: duplicates are reported, not merged), UPI without vision, what the AI sees
+  await page.getByRole("button", { name: "PDF", exact: true }).click();
+  await page.locator('input[type="file"]').setInputFiles("public/demo/statement-oct.pdf");
+  await page.getByText("Added").waitFor({ timeout: 120000 });
+  await page.waitForTimeout(500);
+  await shot("14-pdf");
+  console.log("pdf:", (await page.locator("main").innerText()).match(/Added[\s\S]{0,80}/)?.[0].replace(/\s+/g, " "));
+  await page.getByRole("button", { name: "UPI screenshot", exact: true }).click();
+  await page.locator('input[type="file"]').setInputFiles(`${out}/9-ghost.png`);
+  await page.getByText("vision model, which this deployment").waitFor({ timeout: 30000 });
+  console.log("upi: clear no-vision message shown");
+  await page.getByText("What the AI sees").click();
+  await page.waitForTimeout(500);
+  await shot("15-ai-sees");
   // later blocks append here
 }
 console.log("errors:", errors.length ? errors.join("\n") : "none");

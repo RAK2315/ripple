@@ -13,8 +13,8 @@ type Tab = "sms" | "csv" | "pdf" | "upi";
 const TABS: { id: Tab; label: string; hint: string }[] = [
   { id: "sms", label: "Bank SMS", hint: "Paste a dump of HDFC, ICICI, SBI or Axis alerts. Blank line between messages." },
   { id: "csv", label: "CSV", hint: "Any bank export. We detect the date, amount and description columns, and debit/credit or signed amounts." },
-  { id: "pdf", label: "PDF", hint: "Text layer first; scanned pages go to a vision model. No layout parser." },
-  { id: "upi", label: "UPI screenshot", hint: "A GPay or PhonePe history screen." },
+  { id: "pdf", label: "PDF", hint: "Statements with a text layer are read line by line (masked first). Scanned PDFs need a vision model, not enabled on this free-tier deployment." },
+  { id: "upi", label: "UPI screenshot", hint: "A GPay or PhonePe history screen. Needs a vision model, not enabled on this free-tier deployment; use SMS or CSV instead." },
 ];
 
 interface Summary {

@@ -96,11 +96,11 @@ export function applyAssumptions(base: Baseline, assumptions: Assumption[]): Mon
     if (a.kind === "income_change") income += a.amount;
     if (a.kind === "add_recurring") extraFixed += a.amount;
     if (a.kind === "remove_recurring") extraFixed -= a.amount;
-    if (a.kind === "category_pct" || a.kind === "category_abs") {
+    if (a.kind === "category_pct" || a.kind === "category_abs" || a.kind === "category_set") {
       const f = fixed[a.category] ?? 0;
       const v = variable[a.category] ?? 0;
       const total = f + v;
-      const next = a.kind === "category_pct" ? total * (1 + a.pct / 100) : total + a.amount;
+      const next = a.kind === "category_pct" ? total * (1 + a.pct / 100) : a.kind === "category_abs" ? total + a.amount : a.amount;
       // scale both parts proportionally; if the category had nothing, put it in variable
       if (total > 0) {
         fixed[a.category] = Math.round((f / total) * next);
@@ -140,13 +140,15 @@ export interface Projection {
   nearestGoal: GoalResult | null;
 }
 
-function fundGoals(goals: Goal[], monthlySurplus: number, oneOffs: Record<string, number>, startMonth: string, horizon = 72): Record<string, string | null> {
+const HORIZON = 72;
+
+function fundGoals(goals: Goal[], surplusAt: (k: number) => number, oneOffs: Record<string, number>, startMonth: string, horizon = HORIZON): Record<string, string | null> {
   const sorted = [...goals].sort((a, b) => a.priority - b.priority);
   const alloc: Record<string, number> = Object.fromEntries(sorted.map((g) => [g.id, g.allocated_so_far]));
   const done: Record<string, string | null> = Object.fromEntries(sorted.map((g) => [g.id, g.allocated_so_far >= g.target_amount ? startMonth : null]));
   for (let k = 1; k <= horizon; k++) {
     const month = addMonths(startMonth, k);
-    let pool = monthlySurplus - (oneOffs[month] ?? 0);
+    let pool = surplusAt(k) - (oneOffs[month] ?? 0);
     if (pool <= 0) continue;
     for (const g of sorted) {
       if (done[g.id]) continue;
@@ -169,6 +171,17 @@ export function project(
   today: string,
   months: number,
 ): Projection {
+  const start = ym(today);
+  // plan per month: assumptions with a `from` month switch on at that month
+  const froms = [...new Set(assumptions.map((a) => ("from" in a ? a.from : undefined)).filter((f): f is string => !!f))];
+  const planFor = (m: string) => applyAssumptions(base, assumptions.filter((a) => !("from" in a) || !a.from || a.from <= m));
+  const cache = new Map<string, MonthPlan>();
+  const planAt = (m: string) => {
+    const key = froms.filter((f) => f <= m).sort().join(",");
+    if (!cache.has(key)) cache.set(key, planFor(m));
+    return cache.get(key)!;
+  };
+  // the plan shown as "monthly" is the one in effect after every dated change has kicked in
   const plan = applyAssumptions(base, assumptions);
   const goalsAdj = goals.map((g) => {
     let out = { ...g };
@@ -182,20 +195,21 @@ export function project(
   const oneOffs: Record<string, number> = {};
   for (const a of assumptions) if (a.kind === "one_off") oneOffs[ym(a.date)] = (oneOffs[ym(a.date)] ?? 0) + a.amount;
 
-  const start = ym(today);
-  const runs = { likely: plan.surplus, optimistic: plan.surplus + base.variableSigma, pessimistic: plan.surplus - base.variableSigma };
+  const sigma = base.variableSigma;
+  const surplusAt = (k: number) => planAt(addMonths(start, k)).surplus;
   const points: ProjectionPoint[] = [{ month: start, likely: startBalance, optimistic: startBalance, pessimistic: startBalance }];
   let bal = { likely: startBalance, optimistic: startBalance, pessimistic: startBalance };
   for (let k = 1; k <= months; k++) {
     const m = addMonths(start, k);
     const o = oneOffs[m] ?? 0;
-    bal = { likely: bal.likely + runs.likely - o, optimistic: bal.optimistic + runs.optimistic - o, pessimistic: bal.pessimistic + runs.pessimistic - o };
+    const sp = surplusAt(k);
+    bal = { likely: bal.likely + sp - o, optimistic: bal.optimistic + sp + sigma - o, pessimistic: bal.pessimistic + sp - sigma - o };
     points.push({ month: m, ...bal });
   }
 
-  const dl = fundGoals(goalsAdj, runs.likely, oneOffs, start);
-  const dop = fundGoals(goalsAdj, runs.optimistic, oneOffs, start);
-  const dpe = fundGoals(goalsAdj, runs.pessimistic, oneOffs, start);
+  const dl = fundGoals(goalsAdj, surplusAt, oneOffs, start);
+  const dop = fundGoals(goalsAdj, (k) => surplusAt(k) + sigma, oneOffs, start);
+  const dpe = fundGoals(goalsAdj, (k) => surplusAt(k) - sigma, oneOffs, start);
   const results: GoalResult[] = [...goalsAdj]
     .sort((a, b) => a.priority - b.priority)
     .map((g) => {

@@ -74,13 +74,15 @@ export interface Profile {
   currency: "INR";
 }
 
+/** `from` = first month ("YYYY-MM") the assumption applies; omitted = from now. Amounts in paise. */
 export type Assumption =
-  | { kind: "category_pct"; category: Category; pct: number }
-  | { kind: "category_abs"; category: Category; amount: number }
-  | { kind: "income_change"; amount: number }
+  | { kind: "category_pct"; category: Category; pct: number; from?: string }
+  | { kind: "category_abs"; category: Category; amount: number; from?: string }
+  | { kind: "category_set"; category: Category; amount: number; from?: string }
+  | { kind: "income_change"; amount: number; from?: string }
   | { kind: "one_off"; label: string; amount: number; date: string }
-  | { kind: "add_recurring"; label: string; amount: number }
-  | { kind: "remove_recurring"; label: string; amount: number }
+  | { kind: "add_recurring"; label: string; amount: number; from?: string }
+  | { kind: "remove_recurring"; label: string; amount: number; recurring_id?: string; from?: string }
   | { kind: "goal_change"; goal_id: string; target_amount?: number; target_date?: string };
 
 export interface Scenario {

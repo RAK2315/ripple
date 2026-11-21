@@ -292,7 +292,7 @@ Rs.640 paid to KAKA HALWAI via PhonePe on 10/11 from a/c ..4821
 
 Pasting all 11 (blank lines between) must give `total_inputs: 11`, `parsed: 9`, `unparsed: 2` without fallback.
 
-Also: `parseSms` on `public/demo/sms-dump.txt` from the repo (152 messages, our own demo paste) must parse all 152 with 0 unparsed. **This file is literally what gets pasted in the demo.**
+Also: `parseSms` on `public/demo/sms-dump.txt` from the repo (361 messages, one per fixture transaction, our own demo paste) must parse all 361 with 0 unparsed. **This file is literally what gets pasted in the demo.**
 
 ## 6. Self-test before every push
 
@@ -304,7 +304,7 @@ Put tests in `kirti/__tests__/*.test.ts` (vitest; `import { describe, it, expect
 4. `public/demo/statement.csv` → 361 parsed, 0 unparsed.
 5. Each of the 11 SMS examples individually, full `toEqual` on the fields shown.
 6. The 11-message combined paste → stats `{ total_inputs: 11, parsed: 9, unparsed: 2, via_llm: 0 }`, and with the mock fallback → `parsed: 10, via_llm: 1`.
-7. `public/demo/sms-dump.txt` → 152 parsed, 0 unparsed.
+7. `public/demo/sms-dump.txt` → 361 parsed, 0 unparsed.
 8. Generator: deterministic for a seed; exactly 14 BHAGWATI rows; Netflix 19900 before Aug, 49900 from Aug; 5 advice all `accepted: false`; every transaction has all 13 keys with the four categorization fields null; dates valid; amounts positive integers.
 9. A contract-shape check run over every Transaction any test produces: id pattern, date pattern, integer amount > 0, keys exactly the 13.
 

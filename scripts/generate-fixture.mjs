@@ -163,8 +163,8 @@ function sms(t) {
 mkdirSync("public/demo", { recursive: true });
 writeFileSync("contract/fixture.json", JSON.stringify(fixture, null, 2) + "\n");
 writeFileSync("public/demo/statement.csv", "Date,Narration,Amount\n" + transactions.map((t) => t.source_line).join("\n") + "\n");
-// SMS demo dump: last ~2.5 months (what a user would realistically paste)
-const recent = transactions.filter((t) => t.date >= "2026-09-01");
+// SMS demo dump: the full history, so one paste brings in everything
+const recent = transactions;
 writeFileSync("public/demo/sms-dump.txt", recent.map(sms).join("\n\n") + "\n");
 
 const by = (pred) => transactions.filter(pred).length;

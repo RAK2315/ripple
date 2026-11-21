@@ -42,4 +42,4 @@ Update after each block.
 - [x] B7 /goals editor (income override, balance, emergency fund, manual fixed costs, goals reorder/add/delete), /report (computed review + /api/narrative + print), "Ask RIPPLE" coach drawer: securities regex + model flag → refusal + concept + computed monthly amount, refusal log. Model text uses {placeholders} filled by our code; any digit → template
 - [x] B8 privacy: bare payee names masked, masked merchant never taken back from model, panel verified. PDF text layer chunked ~15 rows/call in parallel (55/55 rows, exact totals on public/demo/statement-oct.pdf). UPI + scanned PDF: no vision model on the Groq key → clear "use SMS/CSV" message
 - [x] B9 deployed: https://ripple-psi-gold.vercel.app (Vercel project `ripple`, GROQ_API_KEY in production env); `BASE=<url> node scripts/walk.mjs` passes with 0 console errors. Reset demo is on the Import screen
-- [ ] B10 re-record + polish
+- [x] B10 paced demo footage on the deployed URL: `node scripts/demo.mjs <dir>` → ../demo-recordings/demo-deployed-b10.webm (69 s, spec §7 beats). Not built (cut list #3): coach opportunity generation; seeded advice drives the Ghost

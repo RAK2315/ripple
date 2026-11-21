@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ripple.local/contract/transaction.schema.json",
+  "title": "RIPPLE contract v1.0.0 (frozen)",
+  "$defs": {
+    "date": { "type": "string", "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$" },
+    "category": {
+      "enum": ["Income", "Rent", "Utilities", "Phone & Internet", "Subscriptions", "Groceries", "Dining", "Transport", "Fuel", "Shopping", "Health", "Fitness", "Entertainment", "Travel", "Education", "EMI & Loans", "Insurance", "Family Transfer", "Transfers", "Cash Withdrawal", "Fees & Charges", "Other"]
+    },
+    "transaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "date", "amount", "direction", "raw_description", "account_tail", "source_kind", "source_file", "source_line", "merchant_normalized", "category", "category_source", "confidence"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9_-]{1,64}$" },
+        "date": { "$ref": "#/$defs/date" },
+        "amount": { "type": "integer", "minimum": 1, "description": "Integer paise, always positive" },
+        "direction": { "enum": ["debit", "credit"] },
+        "raw_description": { "type": "string", "minLength": 1 },
+        "account_tail": { "type": ["string", "null"], "pattern": "^\\d{3,4}$" },
+        "source_kind": { "enum": ["csv", "sms", "pdf", "upi_screenshot", "synthetic"] },
+        "source_file": { "type": "string", "minLength": 1 },
+        "source_line": { "type": "string", "minLength": 1 },
+        "merchant_normalized": { "type": ["string", "null"] },
+        "category": { "anyOf": [{ "$ref": "#/$defs/category" }, { "type": "null" }] },
+        "category_source": { "enum": ["rule", "starter_list", "llm", "user", null] },
+        "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+      }
+    },
+    "unparsedRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index", "raw", "reason"],
+      "properties": {
+        "index": { "type": "integer", "minimum": 1 },
+        "raw": { "type": "string" },
+        "reason": { "enum": ["empty", "header_undetected", "no_amount", "bad_amount", "no_date", "bad_date", "no_pattern", "not_a_transaction", "llm_failed"] },
+        "detail": { "type": "string" }
+      }
+    },
+    "parseResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["transactions", "unparsed", "stats"],
+      "properties": {
+        "transactions": { "type": "array", "items": { "$ref": "#/$defs/transaction" } },
+        "unparsed": { "type": "array", "items": { "$ref": "#/$defs/unparsedRow" } },
+        "stats": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["total_inputs", "parsed", "unparsed", "via_llm"],
+          "properties": {
+            "total_inputs": { "type": "integer", "minimum": 0 },
+            "parsed": { "type": "integer", "minimum": 0 },
+            "unparsed": { "type": "integer", "minimum": 0 },
+            "via_llm": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "advice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "date_given", "text", "projected_monthly_saving", "accepted", "acted_on_date"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^adv_[a-z0-9_-]+$" },
+        "date_given": { "$ref": "#/$defs/date" },
+        "text": { "type": "string", "minLength": 1 },
+        "projected_monthly_saving": { "type": "integer", "minimum": 1 },
+        "accepted": { "type": "boolean" },
+        "acted_on_date": { "anyOf": [{ "$ref": "#/$defs/date" }, { "type": "null" }] }
+      }
+    },
+    "fixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "generated_at", "user", "transactions", "advice"],
+      "properties": {
+        "contract_version": { "const": "1.0.0" },
+        "generated_at": { "type": "string" },
+        "user": {
+          "type": "object",
+          "required": ["name", "city"],
+          "properties": { "name": { "type": "string" }, "city": { "type": "string" } }
+        },
+        "transactions": { "type": "array", "items": { "$ref": "#/$defs/transaction" } },
+        "advice": { "type": "array", "items": { "$ref": "#/$defs/advice" } }
+      }
+    }
+  },
+  "oneOf": [{ "$ref": "#/$defs/fixture" }, { "$ref": "#/$defs/parseResult" }, { "$ref": "#/$defs/transaction" }]
+}

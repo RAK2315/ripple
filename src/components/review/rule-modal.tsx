@@ -84,7 +84,7 @@ export function RuleModal({
               This matches <b className="num">{preview.matched.length}</b> past transaction{preview.matched.length === 1 ? "" : "s"}
               {preview.changed.length > 0 && (
                 <>
-                  , <b className="num text-accent">{preview.changed.length}</b> will change category
+                  , <b className="num text-accent">{preview.changed.length}</b> will be updated
                 </>
               )}
               .
@@ -109,7 +109,7 @@ export function RuleModal({
                 disabled={!p.pattern.trim() || preview.matched.length === 0}
                 onClick={() => {
                   addRule({ ...rule, id: uid("rule") });
-                  toast(`Rule learned. ${preview.changed.length} past transaction${preview.changed.length === 1 ? "" : "s"} re-categorized as ${cat}.`);
+                  toast(`Rule learned. ${preview.changed.length} past transaction${preview.changed.length === 1 ? "" : "s"} now ${cat}.`);
                   onClose();
                 }}
                 className="rounded-lg bg-ink px-4 py-2 text-sm text-white disabled:opacity-40"

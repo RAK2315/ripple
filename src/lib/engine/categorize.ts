@@ -1,6 +1,7 @@
 import type { Category, LlmCategory, Rule, Transaction } from "../types";
 import { normalizeMerchant, starterMatch } from "./merchants";
 import { formatINR } from "../format";
+import { LLM_UNCONFIRMED_CAP, LOW_CONFIDENCE } from "../config";
 
 export function ruleMatches(rule: Rule, t: Transaction, merchant: string): boolean {
   if (!rule.active) return false;
@@ -68,7 +69,7 @@ export function categorizeAll(
     if (rule) return out(rule.category, "rule", 1);
     const starter = starterMatch(t.raw_description);
     if (starter) return out(starter.category, "starter_list", 0.95);
-    if (cached) return out(cached.category, "llm", cached.confidence);
+    if (cached) return out(cached.category, "llm", Math.min(cached.confidence, LLM_UNCONFIRMED_CAP));
     if (t.direction === "credit") return out("Income", "starter_list", 0.5);
     return out("Other", "llm", 0);
   });
@@ -77,6 +78,7 @@ export function categorizeAll(
 /** Which rows a candidate rule would match, and how many of them would actually change category. */
 export function previewRule(rule: Rule, categorized: Transaction[]): { matched: Transaction[]; changed: Transaction[] } {
   const matched = categorized.filter((t) => ruleMatches({ ...rule, active: true }, t, t.merchant_normalized ?? ""));
-  const changed = matched.filter((t) => t.category !== rule.category && t.category_source !== "user");
+  // "changed" = category changes, or an unconfirmed model guess becomes a confirmed rule
+  const changed = matched.filter((t) => t.category_source !== "user" && (t.category !== rule.category || (t.confidence ?? 0) < LOW_CONFIDENCE));
   return { matched, changed };
 }

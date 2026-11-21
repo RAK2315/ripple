@@ -35,5 +35,19 @@ await shot("5-rulebook");
 await page.goto(`${base}/`);
 await page.waitForTimeout(1500);
 await shot("6-flow");
+// B4: NL scenario -> editable fields -> run -> diff vs main
+await page.goto(`${base}/scenarios`);
+await page.getByLabel("What if sentence").fill("what if rent goes up by 6000 and I cut eating out by a third");
+await page.getByRole("button", { name: "Build scenario" }).click();
+await page.getByRole("button", { name: "Run scenario" }).waitFor({ timeout: 60000 });
+await shot("7-scenario-draft");
+await page.getByRole("button", { name: "Run scenario" }).click();
+await page.getByTestId("diff-table").waitFor();
+await page.waitForTimeout(800);
+await shot("8-scenario-diff");
+console.log("diff:", (await page.getByTestId("diff-table").innerText()).replace(/\s+/g, " "));
+if (process.env.ONLY !== "core") {
+  // later blocks append here
+}
 console.log("errors:", errors.length ? errors.join("\n") : "none");
 await browser.close();

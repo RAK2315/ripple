@@ -32,4 +32,14 @@ Read `CONTEXT.md` first. Spec: `PRAVAH_SPEC.md` (PRAVAH = old name, product is R
 Update after each block.
 
 - [x] Setup: contract, fixture, briefs, repo
-- [ ] B1 data core
+- [x] Provider: Groq free tier (gpt-oss-120b/20b); model guesses on unconfirmed merchants capped at 0.65 → Review with "Accept" (AI suggests, you confirm once, a rule remembers)
+- [x] B1 data core
+- [x] B2 projection + Flow (Sankey, cone, scrubber, invisible salary, provenance)
+- [x] B3 import (SMS/CSV/PDF/UPI), review + correction loop + rule proposal, rulebook
+- [x] B4 scenarios: NL → editable assumptions → run, branch tree with parents, diff vs any scenario, compare line on timeline
+- [ ] B5 Ghost + rough demo recording
+- [ ] B6 subscriptions/graveyard, nudges, goal-impact, shifts + re-plan
+- [ ] B7 goals & profile, monthly review, coach guardrails
+- [ ] B8 privacy + PDF/UPI verification
+- [ ] B9 deploy (needs user: Vercel login)
+- [ ] B10 re-record + polish

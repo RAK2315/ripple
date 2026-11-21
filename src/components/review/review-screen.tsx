@@ -89,17 +89,25 @@ export function ReviewScreen() {
               </div>
               <div>
                 <select
-                  value={t.category ?? "Other"}
-                  onChange={(e) => onChange(t, e.target.value as Category)}
+                  value={low ? "" : (t.category ?? "Other")}
+                  onChange={(e) => e.target.value && onChange(t, e.target.value as Category)}
                   className={`w-full rounded-lg border px-2 py-1 text-sm ${low ? "border-warn" : "border-line"} bg-card`}
                 >
+                  {low && <option value="">{(t.confidence ?? 0) > 0 ? `${t.category}?` : "Pick a category"}</option>}
                   {CATEGORIES.map((c) => (
                     <option key={c}>{c}</option>
                   ))}
                 </select>
-                <div className="mt-0.5 text-[10px] text-muted">
-                  {SOURCE_LABEL[t.category_source ?? "llm"]}
-                  {t.category_source !== "user" && t.category_source !== "rule" ? ` · ${Math.round((t.confidence ?? 0) * 100)}%` : ""}
+                <div className="mt-0.5 flex items-center gap-2 text-[10px] text-muted">
+                  <span>
+                    {SOURCE_LABEL[t.category_source ?? "llm"]}
+                    {t.category_source !== "user" && t.category_source !== "rule" ? ` · ${Math.round((t.confidence ?? 0) * 100)}%` : ""}
+                  </span>
+                  {low && (t.confidence ?? 0) > 0 && (
+                    <button onClick={() => onChange(t, t.category as Category)} className="ml-auto font-medium text-accent hover:underline">
+                      Accept
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

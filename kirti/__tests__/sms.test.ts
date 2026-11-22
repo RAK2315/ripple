@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseSms } from "../sms";
+import { parseIndianDate } from "../dates";
 import type { SmsLlmFallback } from "../../contract/types";
 
 describe("SMS Parser", () => {
@@ -212,7 +213,7 @@ describe("SMS Parser", () => {
     expect(r10.unparsed[0].reason).toBe("not_a_transaction");
     expect(r10.unparsed[0].index).toBe(1);
 
-    // 11. No pattern (without fallback)
+    // 11. No bank pattern (without fallback)
     const r11 = await parseSms(EXAMPLES[10], { referenceDate });
     expect(r11.transactions).toHaveLength(0);
     expect(r11.unparsed).toHaveLength(1);
@@ -311,5 +312,66 @@ describe("SMS Parser", () => {
     expect(res.stats.unparsed).toBe(0);
     expect(res.transactions).toHaveLength(361);
     expect(res.unparsed).toHaveLength(0);
+
+    // Verify 100% agreement with src/lib/ingest/fallback
+    const { fallbackParseSms } = await import("../../src/lib/ingest/fallback");
+    const fallbackRes = await fallbackParseSms(text);
+    expect(fallbackRes.transactions).toHaveLength(361);
+
+    for (let i = 0; i < 361; i++) {
+      const kt = res.transactions[i];
+      const ft = fallbackRes.transactions[i];
+      expect(kt.date).toBe(ft.date);
+      expect(kt.amount).toBe(ft.amount);
+      expect(kt.direction).toBe(ft.direction);
+      expect(kt.account_tail).toBe(ft.account_tail);
+      expect(kt.raw_description).toBe(ft.raw_description);
+    }
+  });
+
+  it("8. keeps full merchant name in cleanPayee without slash-truncation", async () => {
+    const msg = `Spent Rs.129.00 On HDFC Bank Card 7719 At GOOGLE*YOUTUBE PREMIUM G.CO/HELPPAY# 7719 On 2026-04-18:14:15:30 Not You? Call 18002586161`;
+    const res = await parseSms(msg, { referenceDate });
+
+    expect(res.transactions).toHaveLength(1);
+    expect(res.transactions[0].raw_description).toBe(
+      "GOOGLE*YOUTUBE PREMIUM G.CO/HELPPAY# 7719"
+    );
+  });
+
+  it("9. does not flag real transactions with OTP safety footer as not_a_transaction", async () => {
+    const msg = `Sent Rs.412.00\nFrom HDFC Bank A/C *4821\nTo SWIGGY\nOn 14/11/26\nRef 431298765432\nNever share your OTP with anyone.`;
+    const res = await parseSms(msg, { referenceDate });
+
+    expect(res.transactions).toHaveLength(1);
+    expect(res.transactions[0]).toMatchObject({
+      amount: 41200,
+      direction: "debit",
+      raw_description: "SWIGGY",
+    });
+  });
+
+  it("10. parses PNB generic debit without capturing 'Rs' as payee", async () => {
+    const msg = `PNB: A/c XX1234 debited for Rs 500.00 on 12-Nov-26 towards electricity bill. Ref 431298112233`;
+    const res = await parseSms(msg, { referenceDate });
+
+    expect(res.transactions).toHaveLength(1);
+    expect(res.transactions[0]).toMatchObject({
+      amount: 50000,
+      direction: "debit",
+      raw_description: "electricity bill",
+      account_tail: "1234",
+    });
+  });
+
+  it("11. parses year-less dates (12 Nov, 10/11) and rolls back if after referenceDate", () => {
+    // Current reference date: 2026-11-21
+    // 12 Nov is on or before 2026-11-21 => stays 2026-11-12
+    expect(parseIndianDate("12 Nov", "2026-11-21")).toBe("2026-11-12");
+
+    // Reference date: 2026-03-01
+    // 12 Nov would be 2026-11-12, which is in future => rolls back to 2025-11-12
+    expect(parseIndianDate("12 Nov", "2026-03-01")).toBe("2025-11-12");
+    expect(parseIndianDate("10/11", "2026-03-01")).toBe("2025-11-10");
   });
 });

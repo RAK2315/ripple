@@ -12,33 +12,43 @@ export interface ExtractedSms {
 
 /**
  * Checks if a message is a non-transaction before attempting regex patterns.
+ * Ensures safety footers like "Never share your OTP" on real debit/credit
+ * transactions do NOT cause them to be marked as not_a_transaction.
  */
 export function isNonTransaction(message: string): boolean {
   const lower = message.toLowerCase();
 
-  // 1. OTP / Verification code
+  // Check if message is a completed transaction confirmation
+  const isCompletedTxn =
+    /\b(?:sent\s+rs|spent\s+rs|deposited\s+in|debited\s+for|credited\s+with|debited\s+by|credited\s+by|is\s+credited\s+with|a\/c\s+(?:xx|\*)?\d+\s+debited|acct\s+(?:xx|\*)?\d+\s+debited)\b/i.test(
+      message
+    );
+
+  // 1. OTP / Verification code message shape
+  const isOtpMessage =
+    /\byour\s+otp\s+for\b/i.test(lower) ||
+    /\b(?:is\s+your\s+otp|use\s+otp\b|one\s*time\s*password\s+is\b)/i.test(lower) ||
+    /\botp\s+for\s+(?:txn|transaction)\s+of\b/i.test(lower) ||
+    /\bverification\s+code\s+is\s+\d{4,8}\b/i.test(lower) ||
+    /\botp\s+(?:to\s+authenticate|to\s+verify|is\s+\d{4,8})\b/i.test(lower);
+
+  if (isOtpMessage && !isCompletedTxn) {
+    return true;
+  }
+
+  // 2. Future / scheduled debit (not yet executed)
   if (
-    /\b(?:otp|one time password|verification code|security code|secret code)\b/i.test(
+    /\b(?:will be debited|is scheduled to be debited|auto-?debit scheduled|has been scheduled to be debited)\b/i.test(
       lower
-    ) ||
-    (/\bcode\b/i.test(lower) && /\b(?:do not share|valid for)\b/i.test(lower)) ||
-    /\byour otp for\b/i.test(lower)
+    ) &&
+    !isCompletedTxn
   ) {
     return true;
   }
 
-  // 2. Future / scheduled debit
+  // 3. Promotional offers (avoid matching real merchants like "BEST OFFERS MART")
   if (
-    /\b(?:will be debited|is scheduled to be debited|auto-?debit scheduled|has been scheduled)\b/i.test(
-      lower
-    )
-  ) {
-    return true;
-  }
-
-  // 3. Promotional offers
-  if (
-    /\b(?:pre-approved|apply for personal loan|instant loan|credit limit increase|claim your prize|congratulations! you are eligible)\b/i.test(
+    /\b(?:pre-approved personal loan|apply for personal loan|instant personal loan offer|claim your reward points|congratulations! you are eligible for)\b/i.test(
       lower
     )
   ) {
@@ -55,11 +65,12 @@ export function isNonTransaction(message: string): boolean {
     return true;
   }
 
-  // 5. Failed / declined transactions
+  // 5. Failed / declined transactions (avoid matching "Refund for failed txn credit")
   if (
-    /\b(?:transaction declined|txn failed|transaction failed|declined due to|insufficient balance|unsuccessful transaction)\b/i.test(
+    /\b(?:transaction (?:has been )?declined|txn declined|transaction failed|txn failed|declined due to insufficient)\b/i.test(
       lower
-    )
+    ) &&
+    !/\b(?:refund|credited|deposited)\b/i.test(lower)
   ) {
     return true;
   }
@@ -69,21 +80,13 @@ export function isNonTransaction(message: string): boolean {
 
 /**
  * Cleans extracted merchant / payee strings.
+ * Keeps the full payee name as written in the SMS without chopping at "/"
+ * so the app can normalize it.
  */
 function cleanPayee(raw: string): string {
   let payee = raw.trim();
-  // Strip trailing punctuation or disclaimers
+  // Strip trailing punctuation
   payee = payee.replace(/[.;,]+$/, "").trim();
-  // If it's a UPI/IMPS path like UPI/P2M/.../PUNE METRO RAIL, take the last segment
-  if (payee.includes("/")) {
-    const parts = payee.split("/").filter(Boolean);
-    if (parts.length > 0) {
-      const last = parts[parts.length - 1].trim();
-      if (last.length > 2 && !/^\d+$/.test(last)) {
-        payee = last;
-      }
-    }
-  }
   return payee.replace(/\s+/g, " ").trim();
 }
 
@@ -109,7 +112,7 @@ export function matchSmsPattern(
         amount: amountParsed.amount,
         date,
         direction: "credit",
-        raw_description: hdfcCreditMatch[4].trim(),
+        raw_description: cleanPayee(hdfcCreditMatch[4]),
         account_tail: hdfcCreditMatch[2],
       };
     }
@@ -137,7 +140,7 @@ export function matchSmsPattern(
   // 3. HDFC Card Spend - Example 3
   // Spent Rs.499.00 On HDFC Bank Card 7719 At NETFLIX.COM On 2026-11-07:10:12:44
   const hdfcCardMatch = message.match(
-    /Spent\s+(?:Rs\.?|INR)?\s*([0-9,]+(?:\.[0-9]{1,2})?)\s+On\s+HDFC\s+Bank\s+Card\s*([0-9]{3,4})\s+At\s+(.+?)\s+On\s+([0-9/.:-]+)(?:\s+Not\s*You\?|$)/i
+    /Spent\s+(?:Rs\.?|INR)?\s*([0-9,]+(?:\.[0-9]{1,2})?)\s+On\s+HDFC\s+Bank\s+Card\s*([0-9]{3,4})\s+At\s+(.+?)\s+On\s+([0-9a-zA-Z/.:-]+?)(?:\s+Not\s*You\?|$|\.)/i
   );
   if (hdfcCardMatch) {
     const amountParsed = parseMoneyString(hdfcCardMatch[1]);
@@ -175,7 +178,7 @@ export function matchSmsPattern(
   // 5. ICICI Credit - Example 5
   // Dear Customer, Acct XX903 is credited with Rs 1,299.00 on 21-Aug-26 from AMAZON PAY. UPI:430912345678-ICICI Bank.
   const iciciCreditMatch = message.match(
-    /Acct\s*(?:XX|\*)*([0-9]{3,4})\s+is\s+credited\s+with\s+(?:Rs\.?|INR)?\s*([0-9,]+(?:\.[0-9]{1,2})?)\s+on\s+([0-9a-zA-Z-]+)\s+from\s+(.+?)(?:\.\s*UPI:|$)/i
+    /(?:Dear\s+Customer,?\s*)?Acct\s*(?:XX|\*)*([0-9]{3,4})\s+is\s+credited\s+with\s+(?:Rs\.?|INR)?\s*([0-9,]+(?:\.[0-9]{1,2})?)\s+on\s+([0-9a-zA-Z-]+)\s+from\s+(.+?)(?:\.\s*UPI:|$|\.)/i
   );
   if (iciciCreditMatch) {
     const amountParsed = parseMoneyString(iciciCreditMatch[2]);
@@ -194,7 +197,7 @@ export function matchSmsPattern(
   // 6. SBI UPI Debit - Example 6
   // Dear UPI user A/C X4821 debited by 120.0 on date 12Nov26 trf to BHAGWATI TIFFIN Refno 431212345678. If not u? call 1800111109. -SBI
   const sbiDebitMatch = message.match(
-    /A\/C\s*[X*]*([0-9]{3,4})\s+debited\s+by\s+(?:Rs\.?|INR)?\s*([0-9,]+(?:\.[0-9]{1,2})?)\s+on\s+date\s+([0-9a-zA-Z-]+)\s+trf\s+to\s+(.+?)(?:\s+Refno|\.|$)/i
+    /A\/C\s*[X*]*([0-9]{3,4})\s+debited\s+by\s+(?:Rs\.?|INR)?\s*([0-9,]+(?:\.[0-9]{1,2})?)\s+on\s+date\s+([0-9a-zA-Z-]+)\s+trf\s+to\s+(.+?)(?:\s+Refno|\.|$|\s+If\s+not)/i
   );
   if (sbiDebitMatch) {
     const amountParsed = parseMoneyString(sbiDebitMatch[2]);
@@ -234,24 +237,31 @@ export function matchSmsPattern(
   // 8. Axis UPI Debit (multi-line) - Example 8
   // INR 1200.00 debited / A/c no. XX4821 / 05-11-26, 10:15:32 / UPI/P2M/431298765432/PUNE METRO RAIL / Not you? ... Axis Bank
   const axisDebitMatch = message.match(
-    /(?:INR|Rs\.?)\s*([0-9,]+(?:\.[0-9]{1,2})?)\s+debited[\s\S]*?A\/c\s*no\.\s*(?:XX|\*)*([0-9]{3,4})[\s\S]*?([0-9/.-]{8,10})[\s\S]*?(?:UPI\/\S+\/([^\r\n]+)|([^\r\n]+debited))/i
+    /(?:INR|Rs\.?)\s*([0-9,]+(?:\.[0-9]{1,2})?)\s+debited[\s\S]*?A\/c\s*no\.\s*(?:XX|\*)*([0-9]{3,4})[\s\S]*?([0-9/.-]{8,10})/i
   );
   if (axisDebitMatch && /Axis\s+Bank/i.test(message)) {
     const amountParsed = parseMoneyString(axisDebitMatch[1]);
     const date = parseIndianDate(axisDebitMatch[3], referenceDate);
-    // Find the UPI narration line
-    const upiLine = message.split(/\r?\n/).find((l) => l.trim().startsWith("UPI/"));
-    let payee = "AXIS DEBIT";
+    const upiLine = message
+      .split(/\r?\n/)
+      .find((l) => /^(?:UPI|IMPS)\//i.test(l.trim()));
+    let payee = "";
     if (upiLine) {
       const parts = upiLine.trim().split("/");
-      payee = parts[parts.length - 1].trim();
+      if (parts.length >= 4) {
+        payee = parts.slice(3).join("/").trim();
+      }
+    }
+    if (!payee) {
+      const refMatch = message.match(/\b(?:Ref|UPI|RRN)[:\s]*([0-9]+)\b/i);
+      payee = refMatch ? `REF ${refMatch[1]}` : "AXIS DEBIT";
     }
     if (amountParsed && date) {
       return {
         amount: amountParsed.amount,
         date,
         direction: "debit",
-        raw_description: payee,
+        raw_description: cleanPayee(payee),
         account_tail: axisDebitMatch[2],
       };
     }
@@ -265,36 +275,50 @@ export function matchSmsPattern(
   if (axisCreditMatch && /Axis\s+Bank/i.test(message)) {
     const amountParsed = parseMoneyString(axisCreditMatch[1]);
     const date = parseIndianDate(axisCreditMatch[3], referenceDate);
-    const impsLine = message.split(/\r?\n/).find((l) => l.trim().startsWith("IMPS/"));
-    let payee = "AXIS CREDIT";
+    const impsLine = message
+      .split(/\r?\n/)
+      .find((l) => /^(?:UPI|IMPS)\//i.test(l.trim()));
+    let payee = "";
     if (impsLine) {
       const parts = impsLine.trim().split("/");
-      payee = parts[parts.length - 1].trim();
+      if (parts.length >= 4) {
+        payee = parts.slice(3).join("/").trim();
+      }
+    }
+    if (!payee) {
+      const refMatch = message.match(/\b(?:Ref|IMPS|RRN)[:\s]*([0-9]+)\b/i);
+      payee = refMatch ? `REF ${refMatch[1]}` : "AXIS CREDIT";
     }
     if (amountParsed && date) {
       return {
         amount: amountParsed.amount,
         date,
         direction: "credit",
-        raw_description: payee,
+        raw_description: cleanPayee(payee),
         account_tail: axisCreditMatch[2],
       };
     }
   }
 
-  // 10. General / Fallback regex for other bank formats:
-  // Check if contains debited / credited
-  const isDebit = /\b(?:debited|spent|paid|withdrawn|sent)\b/i.test(norm);
-  const isCredit = /\b(?:credited|deposited|received)\b/i.test(norm);
+  // 10. General / Fallback regex for other bank formats (Kotak, PNB, BOB, etc.)
+  // Requires explicit bank debit/credit terms (e.g. debited, credited, deposited, withdrawn).
+  // Non-bank third-party payment notifications like "Rs.640 paid to KAKA HALWAI via PhonePe"
+  // do not match here and cleanly fall through to LLM fallback (Contract Example 11).
+  const isDebit = /\b(?:debited|withdrawn)\b/i.test(norm);
+  const isCredit = /\b(?:credited|deposited)\b/i.test(norm);
 
   if (isDebit || isCredit) {
     const dir: Direction = isDebit ? "debit" : "credit";
 
-    // Extract amount
-    const amtMatch = norm.match(
-      /(?:INR|Rs\.?|₹)\s*([0-9,]+(?:\.[0-9]{1,2})?)|([0-9,]+(?:\.[0-9]{1,2})?)\s*(?:INR|Rs\.?|₹|debited|credited)/i
-    );
-    const amountParsed = amtMatch ? parseMoneyString(amtMatch[1] || amtMatch[2]) : null;
+    // Extract amount: strictly require currency prefix or debit/credit keyword prefix
+    // to avoid misinterpreting account numbers (e.g. A/c XX1234 debited) as amount
+    const amtMatch =
+      norm.match(/(?:INR|Rs\.?|₹)\s*([0-9,]+(?:\.[0-9]{1,2})?)/i) ||
+      norm.match(
+        /(?:debited\s+by|debited\s+for|credited\s+by|credited\s+with)\s*(?:INR|Rs\.?|₹)?\s*([0-9,]+(?:\.[0-9]{1,2})?)/i
+      );
+
+    const amountParsed = amtMatch ? parseMoneyString(amtMatch[1]) : null;
 
     // Extract tail
     const tailMatch = norm.match(
@@ -302,35 +326,52 @@ export function matchSmsPattern(
     );
     const tail = tailMatch ? tailMatch[1] : null;
 
-    // Extract date
+    // Extract date - handles YYYY-MM-DD, DD/MM/YY(YY), DD-MMM-YY(YY), year-less DD MMM (e.g. 12 Nov) & DD/MM
     const dateMatch = norm.match(
-      /\b([0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{2,4}|[0-9]{1,2}[-/\s]?[a-zA-Z]{3}[-/\s]?[0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2})\b/
+      /\b([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{2,4}|[0-9]{1,2}[-/\s]?[a-zA-Z]{3}(?:[-/\s]?[0-9]{2,4})?|[0-9]{1,2}[/-][0-9]{1,2})\b/
     );
-    const date = dateMatch ? parseIndianDate(dateMatch[1], referenceDate) : null;
+    const date = dateMatch
+      ? parseIndianDate(dateMatch[1], referenceDate)
+      : null;
 
-    // Extract payee / merchant
+    // Extract payee / merchant - strictly avoid capturing "for Rs" or currency as payee!
     let desc = "";
-    const toMatch = norm.match(
-      /(?:to|at|trf to|info|for|vpa)\s+([A-Za-z0-9*&@._\s-]+?)(?:\s+(?:on|ref|refno|upi|via|avl|not you|call|bal)\b|\.|$)/i
-    );
-    const fromMatch = norm.match(
-      /(?:from|by)\s+([A-Za-z0-9*&@._\s-]+?)(?:\s+(?:on|ref|refno|upi|via|avl|not you|call|bal)\b|\.|$)/i
-    );
 
-    if (dir === "debit" && toMatch) {
-      desc = cleanPayee(toMatch[1]);
-    } else if (dir === "credit" && fromMatch) {
-      desc = cleanPayee(fromMatch[1]);
+    if (dir === "debit") {
+      const toMatch = norm.match(
+        /(?:to|at|trf to|vpa|towards|info)\s+([A-Za-z0-9*&@._\s-]+?)(?:\s+(?:on|ref|refno|upi|via|avl|not you|call|bal)\b|\.|$)/i
+      );
+      if (toMatch) {
+        const candidate = toMatch[1].trim();
+        // Do not capture currency or amount as payee
+        if (!/^(?:Rs\.?|INR|₹|\d)/i.test(candidate)) {
+          desc = cleanPayee(candidate);
+        }
+      }
+    } else {
+      const fromMatch = norm.match(
+        /(?:from|by)\s+([A-Za-z0-9*&@._\s-]+?)(?:\s+(?:on|ref|refno|upi|via|avl|not you|call|bal)\b|\.|$)/i
+      );
+      if (fromMatch) {
+        const candidate = fromMatch[1].trim();
+        if (!/^(?:Rs\.?|INR|₹|\d)/i.test(candidate)) {
+          desc = cleanPayee(candidate);
+        }
+      }
     }
 
     if (amountParsed && date) {
       if (!desc) {
-        // Fallback payee description
-        const refMatch = norm.match(/\b(?:ref(?:\s*no)?|upi)[:\s]*([0-9]{6,16})\b/i);
-        const refNo = refMatch ? ` REF ${refMatch[1]}` : "";
-        const bankMatch = norm.match(/\b(HDFC|ICICI|SBI|AXIS|KOTAK|PNB|BOB)\b/i);
-        const bankName = bankMatch ? bankMatch[1].toUpperCase() : "BANK";
-        desc = `${bankName} ${dir.toUpperCase()}${refNo}`;
+        // Fallback: look for reference number rather than inventing strings
+        const refMatch = norm.match(
+          /\b(?:ref(?:\s*no)?|upi|rrn)[:\s]*([0-9]{6,16})\b/i
+        );
+        if (refMatch) {
+          desc = `REF ${refMatch[1]}`;
+        } else {
+          // Use verbatim snippet of message
+          desc = norm.slice(0, 40).trim();
+        }
       }
 
       return {

@@ -40,6 +40,26 @@ export function getTodayIst(): string {
 }
 
 /**
+ * Validates whether year, month, day form a real calendar date.
+ * Rejects impossible dates like 2026-13-45 or 2026-02-31.
+ */
+export function isValidCalendarDate(
+  year: number,
+  month: number,
+  day: number
+): boolean {
+  if (year < 1900 || year > 2100) return false;
+  if (month < 1 || month > 12) return false;
+  if (day < 1 || day > 31) return false;
+  const d = new Date(Date.UTC(year, month - 1, day));
+  return (
+    d.getUTCFullYear() === year &&
+    d.getUTCMonth() === month - 1 &&
+    d.getUTCDate() === day
+  );
+}
+
+/**
  * Parses date strings commonly found in Indian bank statements & SMS.
  * Indian banks are ALWAYS day-first: 14/11/26 => 2026-11-14.
  *
@@ -50,7 +70,13 @@ export function getTodayIst(): string {
  * - DD-MMM-YY or DD-MMM-YYYY (e.g. 01-NOV-26, 12-Nov-26, 21-Aug-26)
  * - DD MMM YY or DD MMM YYYY (e.g. 12 Nov 2026)
  * - DDMMMYY or DDMMMYYYY (e.g. 12Nov26, 15Nov26)
- * - DD/MM or DD-MM (resolves year using referenceDate)
+ * - Year-less: DD MMM, DD-MMM, DD/MM, DD-MM
+ *
+ * For year-less dates:
+ * Resolves year using referenceDate. If the resulting date is after
+ * referenceDate, it rolls back by 1 year.
+ *
+ * Returns null if the date is invalid or impossible (e.g. 2026-02-31).
  */
 export function parseIndianDate(
   raw: string,
@@ -60,44 +86,67 @@ export function parseIndianDate(
   const str = raw.trim();
 
   const ref = referenceDate || "2026-11-21";
-  const refYear = ref.slice(0, 4);
+  const refYear = parseInt(ref.slice(0, 4), 10);
 
   // 1. ISO format: YYYY-MM-DD (possibly with time e.g. 2026-11-07:10:12:44)
   const isoMatch = str.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
   if (isoMatch) {
-    const [, y, m, d] = isoMatch;
+    const y = parseInt(isoMatch[1], 10);
+    const m = parseInt(isoMatch[2], 10);
+    const d = parseInt(isoMatch[3], 10);
+    if (!isValidCalendarDate(y, m, d)) return null;
     return `${y}-${pad2(m)}-${pad2(d)}`;
   }
 
-  // 2. Alpha month: 01-NOV-26, 12-Nov-26, 12Nov26, 12 Nov 2026
+  // 2. Alpha month: 01-NOV-26, 12-Nov-26, 12Nov26, 12 Nov 2026, or year-less 12 Nov, 12-Nov
   const alphaMatch = str.match(
-    /^(\d{1,2})[-/\s]?([a-zA-Z]{3})[-/\s]?(\d{2,4})?/
+    /^(\d{1,2})[-/\s]?([a-zA-Z]{3})(?:[-/\s]?(\d{2,4}))?/
   );
   if (alphaMatch) {
-    const [, d, monStr, yRaw] = alphaMatch;
-    const m = MONTH_MAP[monStr.toLowerCase()];
-    if (m) {
+    const dNum = parseInt(alphaMatch[1], 10);
+    const monStr = alphaMatch[2];
+    const yRaw = alphaMatch[3];
+    const mStr = MONTH_MAP[monStr.toLowerCase()];
+    if (mStr) {
+      const mNum = parseInt(mStr, 10);
       let y = refYear;
       if (yRaw) {
-        y = yRaw.length === 2 ? `20${yRaw}` : yRaw;
+        y = yRaw.length === 2 ? 2000 + parseInt(yRaw, 10) : parseInt(yRaw, 10);
+      } else {
+        // Year-less: check roll-back if after referenceDate
+        let candidate = `${y}-${mStr}-${pad2(dNum)}`;
+        if (candidate > ref) {
+          y = refYear - 1;
+        }
       }
-      return `${y}-${m}-${pad2(d)}`;
+      if (!isValidCalendarDate(y, mNum, dNum)) return null;
+      return `${y}-${mStr}-${pad2(dNum)}`;
     }
   }
 
   // 3. Day-first numeric with year: DD/MM/YYYY or DD/MM/YY or DD-MM-YYYY or DD-MM-YY
   const numMatch = str.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})/);
   if (numMatch) {
-    const [, d, m, yRaw] = numMatch;
-    const y = yRaw.length === 2 ? `20${yRaw}` : yRaw;
-    return `${y}-${pad2(m)}-${pad2(d)}`;
+    const dNum = parseInt(numMatch[1], 10);
+    const mNum = parseInt(numMatch[2], 10);
+    const yRaw = numMatch[3];
+    const y = yRaw.length === 2 ? 2000 + parseInt(yRaw, 10) : parseInt(yRaw, 10);
+    if (!isValidCalendarDate(y, mNum, dNum)) return null;
+    return `${y}-${pad2(mNum)}-${pad2(dNum)}`;
   }
 
   // 4. Year-less day/month: DD/MM or DD-MM
   const shortMatch = str.match(/^(\d{1,2})[/-](\d{1,2})$/);
   if (shortMatch) {
-    const [, d, m] = shortMatch;
-    return `${refYear}-${pad2(m)}-${pad2(d)}`;
+    const dNum = parseInt(shortMatch[1], 10);
+    const mNum = parseInt(shortMatch[2], 10);
+    let y = refYear;
+    let candidate = `${y}-${pad2(mNum)}-${pad2(dNum)}`;
+    if (candidate > ref) {
+      y = refYear - 1;
+    }
+    if (!isValidCalendarDate(y, mNum, dNum)) return null;
+    return `${y}-${pad2(mNum)}-${pad2(dNum)}`;
   }
 
   return null;
